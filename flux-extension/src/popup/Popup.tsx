@@ -5,7 +5,7 @@ import { ContextProfile, PromptlySettings, PROMPT_MODES, REWRITE_LEVELS, PromptM
 export const Popup: React.FC = () => {
   const [settings, setSettings] = useState<PromptlySettings | null>(null);
   const [saved, setSaved] = useState(false);
-  const [activeTab, setActiveTab] = useState<'general' | 'context' | 'account'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'context'>('general');
 
   useEffect(() => {
     getSettings().then(setSettings);
@@ -50,7 +50,7 @@ export const Popup: React.FC = () => {
 
         {/* Tabs */}
         <div className="flex border-b border-[var(--border-subtle)] w-full">
-          {(['general', 'context', 'account'] as const).map(tab => (
+          {(['general', 'context'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -158,50 +158,7 @@ export const Popup: React.FC = () => {
           </div>
         )}
 
-        {activeTab === 'account' && (
-          <div className="space-y-5 animate-in fade-in duration-300">
-            <section className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Connection Details</h2>
-                <div className="flex items-center gap-1.5">
-                  <div className={`h-1.5 w-1.5 rounded-full ${settings.accessToken ? 'bg-green-500' : 'bg-[var(--text-tertiary)]'}`} />
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-[var(--text-tertiary)]">
-                    {settings.accessToken ? "Connected" : "Not Connected"}
-                  </span>
-                </div>
-              </div>
-              <div className="space-y-3">
-                <Field label="API Base URL">
-                  <input className="input font-mono text-[11px]" value={settings.apiBaseUrl} onChange={(e) => update({ apiBaseUrl: e.target.value })} />
-                </Field>
-                <Field label="Promptly Access Token">
-                  <input
-                    className="input font-mono text-[11px]"
-                    type="password"
-                    value={settings.accessToken ?? ""}
-                    onChange={(e) => update({ accessToken: e.target.value })}
-                    placeholder="Paste your token from promptly.com/dashboard"
-                  />
-                </Field>
-              </div>
-              <div className="space-y-3 mt-6">
-                <h3 className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Categorizer API (Optional)</h3>
-                <Field label="Categorizer API URL">
-                  <input className="input font-mono text-[11px]" value={settings.categorizerApiUrl || ""} onChange={(e) => update({ categorizerApiUrl: e.target.value })} placeholder="https://api.openai.com/v1/chat/completions" />
-                </Field>
-                <Field label="Categorizer API Key">
-                  <input
-                    className="input font-mono text-[11px]"
-                    type="password"
-                    value={settings.categorizerApiKey ?? ""}
-                    onChange={(e) => update({ categorizerApiKey: e.target.value })}
-                    placeholder="sk_..."
-                  />
-                </Field>
-              </div>
-            </section>
-          </div>
-        )}
+
       </div>
     </div>
   );
@@ -230,10 +187,10 @@ const Toggle: React.FC<{ checked: boolean; onChange: (checked: boolean) => void;
     aria-checked={checked}
     aria-label={ariaLabel}
     onClick={() => onChange(!checked)}
-    className={`relative h-[18px] w-[32px] rounded-full transition-colors duration-200 outline-none ${checked ? "bg-[var(--text-primary)]" : "bg-[var(--surface-floating)] border border-[var(--border-subtle)]"}`}
+    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out outline-none ${checked ? "bg-[var(--text-primary)]" : "bg-[var(--surface-floating)] border-[var(--border-subtle)]"}`}
   >
     <span
-      className={`absolute top-[2px] h-[12px] w-[12px] rounded-full shadow-sm transition-transform duration-200 ${checked ? "translate-x-[16px] bg-[var(--surface-base)]" : "translate-x-[2px] bg-[var(--text-tertiary)]"}`}
+      className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full shadow ring-0 transition duration-200 ease-in-out ${checked ? "translate-x-4 bg-[var(--surface-base)]" : "translate-x-0.5 bg-[var(--text-tertiary)]"}`}
     />
   </button>
 );

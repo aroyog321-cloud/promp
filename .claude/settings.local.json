@@ -28,7 +28,28 @@
       "WebSearch",
       "WebFetch(domain:antigravity.google)",
       "WebFetch(domain:www.antigravityide.app)",
-      "WebFetch(domain:codelabs.developers.google.com)"
+      "WebFetch(domain:codelabs.developers.google.com)",
+      "Bash(tasklist /FI \"IMAGENAME eq node.exe\")",
+      "Bash(netstat -ano)",
+      "Bash(findstr \":3000\")",
+      "Bash(powershell.exe -Command \"Get-Process -Id 10768 | Select-Object ProcessName,Id,StartTime\")",
+      "Bash(findstr \":5173\")",
+      "Bash(curl.exe -sS -X GET http://localhost:3000/api/optimize -m 5)",
+      "Bash(curl.exe -sS -X POST \"http://127.0.0.1:3000/api/optimize\" -H \"Content-Type: application/json\" -d '{\"text\":\"explain how photosynthesis works\",\"mode\":\"general\",\"level\":\"medium\"}' -m 15)",
+      "Bash(curl.exe -sS -X POST \"http://[::1]:3000/api/optimize\" -H \"Content-Type: application/json\" -d '{\"text\":\"explain how photosynthesis works\",\"mode\":\"general\",\"level\":\"medium\"}' -m 15)",
+      "Bash(curl.exe -sS -X GET \"http://127.0.0.1:5173/\" -m 5)",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File \"D:/flux-extension/.claude/scratch/find-port-owner.ps1\")",
+      "Bash(curl.exe -sS -X GET \"http://[::1]:3000/\" -m 10)",
+      "Bash(curl.exe -sS -X GET \"http://[::1]:5173/\" -m 10)",
+      "Bash(mkdir -p \"D:/flux-extension/.claude/scratch/screenshots\")",
+      "Bash(\"C:/Program Files/Google/Chrome/Application/chrome.exe\" --headless=new --disable-gpu --hide-scrollbars --window-size=1280,800 --screenshot=\"D:/flux-extension/.claude/scratch/screenshots/web-home.png\" --virtual-time-budget=8000 \"http://[::1]:3000/\")",
+      "Bash(\"C:/Program Files/Google/Chrome/Application/chrome.exe\" --headless=new --disable-gpu --hide-scrollbars --window-size=1280,800 --screenshot=\"D:/flux-extension/.claude/scratch/screenshots/web-home2.png\" --virtual-time-budget=30000 \"http://[::1]:3000/\")",
+      "Bash(node *)",
+      "Bash(\"C:/Program Files/Google/Chrome/Application/chrome.exe\" --headless=new --disable-gpu --hide-scrollbars --window-size=1280,1600 --screenshot=\"D:/flux-extension/.claude/scratch/screenshots/web-home3.png\" --virtual-time-budget=60000 --run-all-compositor-stages-before-draw \"http://[::1]:3000/\")",
+      "Bash(\"C:/Program Files/Google/Chrome/Application/chrome.exe\" --headless=new --disable-gpu --hide-scrollbars --window-size=1280,800 --dump-dom --virtual-time-budget=30000 \"http://[::1]:3000/\")",
+      "Bash(npm init *)",
+      "Bash(gh pr *)",
+      "Bash(grep -E \"\\\\.\\(tsx|ts|js|jsx\\)$\")"
     ]
   }
 }

@@ -1,4 +1,4 @@
-import { OptimizeRequest, OptimizeResponse } from '@promptly/types';
+import { OptimizeRequest, OptimizeResponse, PromptMode } from '@promptly/types';
 import { localOptimize, buildSystemPrompt, buildUserPrompt } from '@promptly/prompt-engine';
 
 class LRUCache<K, V> {
@@ -45,7 +45,7 @@ function getLevelConfig(level: string, isCritique: boolean = false) {
   }
 }
 
-async function directAIFetch(endpoint: string, apiKey: string | undefined, messages: any[], config: any, stream: boolean, onChunk?: (chunk: string) => void) {
+async function directAIFetch(endpoint: string, apiKey: string | undefined, messages: any[], config: any, stream: boolean, onChunk?: (chunk: string) => void, signal?: AbortSignal) {
   const payload = {
     model: "gpt-4o",
     messages,
@@ -60,7 +60,8 @@ async function directAIFetch(endpoint: string, apiKey: string | undefined, messa
       "Content-Type": "application/json",
       ...(apiKey ? { "Authorization": `Bearer ${apiKey}` } : {})
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    signal
   });
 
   if (!res.ok) throw new Error("API responded with " + res.status);
@@ -99,23 +100,39 @@ async function directAIFetch(endpoint: string, apiKey: string | undefined, messa
   }
 }
 
-function isWellStructured(text: string): boolean {
-  const t = text.toLowerCase();
-  return t.includes('# role') && t.includes('# objective') && t.split('#').length > 3;
+async function resolveMode(req: OptimizeRequest, config: { categorizerApiUrl?: string; categorizerApiKey?: string; }): Promise<PromptMode> {
+  let finalMode: PromptMode = req.mode;
+  if (req.mode === "auto") {
+    if (config.categorizerApiUrl) {
+      try {
+        const categorizerPrompt = `Classify this user request into EXACTLY ONE of the following categories: general, developer, designer, marketing, research, business, content-creator, startup-founder. Output ONLY the category name. Do not include punctuation or explanation.\n\nRequest: "${req.text}"`;
+        const isDirectCategorizer = config.categorizerApiUrl.includes('/chat/completions') || config.categorizerApiUrl.includes('/v1');
+        if (isDirectCategorizer) {
+          const endpoint = config.categorizerApiUrl.endsWith('/chat/completions') ? config.categorizerApiUrl : `${config.categorizerApiUrl.replace(/\/+$/, "")}/chat/completions`;
+          const catResult = await directAIFetch(endpoint, config.categorizerApiKey, [{ role: "user", content: categorizerPrompt }], { temperature: 0.1, maxOutputTokens: 20 }, false);
+          const rawCategory = catResult.trim().toLowerCase();
+          if (["general", "developer", "designer", "marketing", "research", "business", "content-creator", "startup-founder"].includes(rawCategory)) {
+            finalMode = rawCategory as any;
+          } else {
+            finalMode = "general";
+          }
+        }
+      } catch (e) {
+        console.warn("Categorizer API failed, falling back to general", e);
+        finalMode = "general";
+      }
+    } else {
+      finalMode = "general";
+    }
+  }
+  return finalMode;
 }
 
 export async function optimizePrompt(
   req: OptimizeRequest,
   config: { apiBaseUrl?: string; apiKey?: string; categorizerApiUrl?: string; categorizerApiKey?: string; accessToken?: string; },
-  options?: { onChunk?: (chunk: string) => void }
+  options?: { onChunk?: (chunk: string) => void, abortSignal?: AbortSignal }
 ): Promise<OptimizeResponse> {
-  if (!req.refinement && isWellStructured(req.text)) {
-    const response: OptimizeResponse = { optimized: req.text, source: "local-fallback" };
-    if (options?.onChunk) {
-      options.onChunk(req.text);
-    }
-    return response;
-  }
 
   const cacheKey = JSON.stringify({ text: req.text, mode: req.mode, level: req.level, refinement: req.refinement });
   if (!req.refinement && PROMPT_CACHE.has(cacheKey) && !options?.onChunk) {
@@ -130,30 +147,7 @@ export async function optimizePrompt(
         : `${config.apiBaseUrl.replace(/\/$/, "")}/api/optimize`;
 
       if (isDirectAI) {
-        let finalMode = req.mode;
-        if (req.mode === "auto") {
-          if (config.categorizerApiUrl) {
-            try {
-              const categorizerPrompt = `Classify this user request into EXACTLY ONE of the following categories: general, developer, designer, marketing, research, business, content-creator, startup-founder. Output ONLY the category name. Do not include punctuation or explanation.\n\nRequest: "${req.text}"`;
-              const isDirectCategorizer = config.categorizerApiUrl.includes('/chat/completions') || config.categorizerApiUrl.includes('/v1');
-              if (isDirectCategorizer) {
-                const endpoint = config.categorizerApiUrl.endsWith('/chat/completions') ? config.categorizerApiUrl : `${config.categorizerApiUrl.replace(/\/+$/, "")}/chat/completions`;
-                const catResult = await directAIFetch(endpoint, config.categorizerApiKey, [{ role: "user", content: categorizerPrompt }], { temperature: 0.1, maxOutputTokens: 20 }, false);
-                const rawCategory = catResult.trim().toLowerCase();
-                if (["general", "developer", "designer", "marketing", "research", "business", "content-creator", "startup-founder"].includes(rawCategory)) {
-                  finalMode = rawCategory as any;
-                } else {
-                  finalMode = "general";
-                }
-              }
-            } catch (e) {
-              console.warn("Categorizer API failed, falling back to general", e);
-              finalMode = "general";
-            }
-          } else {
-            finalMode = "general";
-          }
-        }
+        let finalMode = await resolveMode(req, config);
 
         const platform = req.platform || window.location.hostname || "unknown";
         const systemPrompt = buildSystemPrompt(finalMode, req.level, platform);
@@ -170,7 +164,9 @@ export async function optimizePrompt(
               { role: "user", content: userPrompt }
             ], 
             getLevelConfig(req.level, false), 
-            false
+            false,
+            undefined,
+            options?.abortSignal
           );
 
           // Pass 2: Critique
@@ -197,7 +193,8 @@ ${draftText}`;
             ],
             getLevelConfig(req.level, true),
             !!req.stream,
-            options?.onChunk
+            options?.onChunk,
+            options?.abortSignal
           );
 
           const response: OptimizeResponse = { optimized: finalResult, source: "api" };
@@ -214,7 +211,8 @@ ${draftText}`;
             ],
             getLevelConfig(req.level, false),
             !!req.stream,
-            options?.onChunk
+            options?.onChunk,
+            options?.abortSignal
           );
 
           const response: OptimizeResponse = { optimized: finalResult, source: "api" };
@@ -222,30 +220,7 @@ ${draftText}`;
           return response;
         }
       } else {
-        let finalMode = req.mode;
-        if (req.mode === "auto") {
-          if (config.categorizerApiUrl) {
-            try {
-              const categorizerPrompt = `Classify this user request into EXACTLY ONE of the following categories: general, developer, designer, marketing, research, business, content-creator, startup-founder. Output ONLY the category name. Do not include punctuation or explanation.\n\nRequest: "${req.text}"`;
-              const isDirectCategorizer = config.categorizerApiUrl.includes('/chat/completions') || config.categorizerApiUrl.includes('/v1');
-              if (isDirectCategorizer) {
-                const endpoint = config.categorizerApiUrl.endsWith('/chat/completions') ? config.categorizerApiUrl : `${config.categorizerApiUrl.replace(/\/+$/, "")}/chat/completions`;
-                const catResult = await directAIFetch(endpoint, config.categorizerApiKey, [{ role: "user", content: categorizerPrompt }], { temperature: 0.1, maxOutputTokens: 20 }, false);
-                const rawCategory = catResult.trim().toLowerCase();
-                if (["general", "developer", "designer", "marketing", "research", "business", "content-creator", "startup-founder"].includes(rawCategory)) {
-                  finalMode = rawCategory as any;
-                } else {
-                  finalMode = "general";
-                }
-              }
-            } catch (e) {
-              console.warn("Categorizer API failed, falling back to general", e);
-              finalMode = "general";
-            }
-          } else {
-            finalMode = "general";
-          }
-        }
+        let finalMode = await resolveMode(req, config);
 
         // Next.js Route
         let payload: any = { ...req, mode: finalMode, platform: req.platform || window.location.hostname || "unknown" };
@@ -255,7 +230,8 @@ ${draftText}`;
             "Content-Type": "application/json", 
             ...(config.accessToken ? { "Authorization": `Bearer ${config.accessToken}` } : (config.apiKey ? { "Authorization": `Bearer ${config.apiKey}` } : {})) 
           },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
+          signal: options?.abortSignal
         });
         if (!res.ok) {
           let errorMsg = "API responded with " + res.status;

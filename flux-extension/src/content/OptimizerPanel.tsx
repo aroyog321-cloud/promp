@@ -28,6 +28,8 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
   const [toast, setToast] = useState<string | null>(null);
   const [refinementInput, setRefinementInput] = useState("");
   
+  const abortControllerRef = useRef<AbortController | null>(null);
+  
   const panelRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const history = useHistory();
@@ -55,6 +57,18 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "h") {
         e.preventDefault();
         onOpenHistory?.();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c" && optimizedText && !isStreaming) {
+        if (window.getSelection()?.toString()) return;
+        e.preventDefault();
+        navigator.clipboard.writeText(optimizedText);
+        setToast("Copied ✓");
+        setTimeout(() => setToast(null), 2000);
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "d" && optimizedText && !isStreaming) {
+        e.preventDefault();
+        setOptimizedText(null);
+        setShowDiff(false);
       }
     };
     
@@ -87,12 +101,16 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
 
     const currentGeneratedText = optimizedText;
     
-    setIsOptimizing(true);
     setIsStreaming(false);
     setOptimizedText(null);
     setShowDiff(false);
     setError(null);
     setOriginalTextUsed(text);
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
 
     const modeToUse = overrideMode || settings.defaultMode;
     const levelToUse = overrideLevel || settings.defaultLevel;
@@ -126,7 +144,8 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
           setIsStreaming(true);
           streamedText += chunk;
           setOptimizedText(streamedText);
-        }
+        },
+        abortSignal: abortControllerRef.current.signal
       });
 
       setIsOptimizing(false);
@@ -197,10 +216,12 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
     let complexityClass = "complexity-low";
     if (score > 80) { complexity = "High"; complexityClass = "complexity-high"; }
     else if (score > 60) { complexity = "Medium"; complexityClass = "complexity-medium"; }
+    
+    const tokenEstimate = Math.round(words.length * 1.3);
 
     meta = (
       <div className="promptly-meta">
-        <span>{words.length} words</span>
+        <span title={`~${tokenEstimate} tokens`}>{words.length} words</span>
         <span>•</span>
         <div className={`pill ${complexityClass}`}><span className="dot" /> {complexity}</div>
       </div>
@@ -225,7 +246,7 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
         </div>
         
         <div style={{ display: "flex", gap: 4 }}>
-          {onOpenHistory && settings.accessToken && (
+          {onOpenHistory && (
             <button className="promptly-btn-icon" onClick={onOpenHistory} title="History (Cmd+H)">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="10" />
@@ -241,55 +262,7 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
         </div>
       </div>
 
-      {!settings.accessToken ? (
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 48, textAlign: "center", gap: 16 }}>
-          <div style={{ width: 48, height: 48, borderRadius: 24, background: "rgba(244, 67, 54, 0.15)", display: "flex", alignItems: "center", justifyContent: "center", color: "#f44336" }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-            </svg>
-          </div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: "var(--fg)" }}>Authentication Required</div>
-          <div style={{ fontSize: 14, color: "var(--fg-muted)", lineHeight: 1.5 }}>
-            You must be authenticated from the website to use this extension.<br/><br/>
-            Please log in at <strong>promptly.com</strong> to get your access token.
-          </div>
-          
-          <div style={{ width: "100%", marginTop: 8 }}>
-            <input 
-              type="password"
-              placeholder="Paste your Promptly Access Token here..."
-              style={{
-                width: "100%",
-                padding: "10px 12px",
-                borderRadius: 6,
-                border: "1px solid var(--border)",
-                background: "var(--surface)",
-                color: "var(--fg)",
-                fontSize: 13,
-                fontFamily: "var(--font-mono, monospace)"
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  const val = e.currentTarget.value.trim();
-                  if (val) {
-                    chrome.storage.sync.get("promptly_settings_v1", (res) => {
-                      const current = res.promptly_settings_v1 || {};
-                      const updated = { ...current, accessToken: val };
-                      chrome.storage.sync.set({ promptly_settings_v1: updated });
-                      if (setSettings) setSettings(updated as PromptlySettings);
-                    });
-                  }
-                }
-              }}
-            />
-            <div style={{ fontSize: 11, color: "var(--fg-muted)", marginTop: 8 }}>
-              Press Enter to save
-            </div>
-          </div>
-        </div>
-      ) : (
-        <>
+
           <div className="promptly-mode-row" style={{ padding: "12px 16px 0", zIndex: 10, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', minWidth: 0 }}>
           <Segmented
@@ -510,8 +483,21 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
               </>
             ) : optimizedText ? (
               <>
-                <button className="promptly-btn-secondary" onClick={() => { setOptimizedText(null); setShowDiff(false); }}>
+                <button className="promptly-btn-secondary" onClick={() => { setOptimizedText(null); setShowDiff(false); }} title="Discard (Cmd+D)">
                   Discard
+                </button>
+                <button className="promptly-btn-secondary" onClick={() => {
+                  if (optimizedText) {
+                    navigator.clipboard.writeText(optimizedText);
+                    setToast("Copied ✓");
+                    setTimeout(() => setToast(null), 2000);
+                  }
+                }} title="Copy to clipboard (Cmd+C)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', marginRight: 4, verticalAlign: 'text-bottom' }}>
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                  Copy
                 </button>
                 <button className="promptly-btn-secondary" onClick={() => handleOptimize()} title="Generate another variation">
                   <svg className="icon-regenerate" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', marginRight: 4, verticalAlign: 'text-bottom' }}>
@@ -520,7 +506,7 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
                   </svg>
                   Regenerate
                 </button>
-                <button className="promptly-btn-primary" onClick={handleAccept}>
+                <button className="promptly-btn-primary" onClick={handleAccept} title="Insert into chat (Cmd+Enter)">
                   Insert Optimized
                 </button>
               </>
@@ -537,8 +523,7 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
           </div>
         </div>
       )}
-        </>
-      )}
+
     </div>
   );
 };
