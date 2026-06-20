@@ -113,3 +113,40 @@ export function classifyTaskType(text: string):
   
   return (bestCategory || topCategories[0]) as any;
 }
+
+export interface IntentSignals {
+  lengthHint?: string;
+  audience?: string;
+  outputFormat?: string;
+  hasConstraints?: boolean;
+}
+
+export function detectIntentSignals(text: string): IntentSignals {
+  const t = text.toLowerCase();
+  const signals: IntentSignals = {};
+
+  // Length signals
+  if (/\b(tweet|x\/|short|tldr|brief|one sentence|one line|elevator pitch)\b/.test(t))       
+    signals.lengthHint = "very short (under 100 words)";
+  else if (/\b(short|quick|concise|brief)\b/.test(t))
+    signals.lengthHint = "concise (150-300 words)";
+  else if (/\b(detailed|in[- ]depth|comprehensive|thorough|long|full|exhaustive)\b/.test(t)) 
+    signals.lengthHint = "detailed (800+ words)";
+  else if (/\b(essay|article|blog post|report|whitepaper|guide|tutorial)\b/.test(t))
+    signals.lengthHint = "long-form (1500+ words)";
+  else if (/\b(list|bullet|step[- ]by[- ]step|checklist)\b/.test(t))
+    signals.outputFormat = "bulleted list or numbered steps";
+
+  // Audience signals
+  const audienceMatch = t.match(/\bfor (kids|children|teens|students|developers|designers|executives|managers|beginners|experts|customers|clients|b2b|b2c|seniors)\b/);
+  if (audienceMatch) signals.audience = audienceMatch[1];
+
+  // Format signals
+  if (/\b(table|spreadsheet|csv|json|markdown)\b/.test(t)) signals.outputFormat = "table or " + (signals.outputFormat || "structured data");
+  if (/\bcode|function|script\b/.test(t)) signals.outputFormat = "code block with explanation";
+
+  // Constraint signals
+  if (/\b(no|don't|avoid|without|never)\b/.test(t)) signals.hasConstraints = true;
+
+  return signals;
+}

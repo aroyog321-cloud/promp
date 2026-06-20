@@ -6,9 +6,57 @@ export const Popup: React.FC = () => {
   const [settings, setSettings] = useState<PromptlySettings | null>(null);
   const [saved, setSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<'general' | 'context'>('general');
+  const [apiPlanData, setApiPlanData] = useState<{ tier: string, total_requests_today: number } | null>(null);
 
   useEffect(() => {
-    getSettings().then(setSettings);
+    const fetchMe = (s: PromptlySettings) => {
+      chrome.storage.local.get(['apiPlanCache'], (res) => {
+        const now = Date.now();
+        if (res.apiPlanCache && res.apiPlanCache.expiresAt > now) {
+          setApiPlanData(res.apiPlanCache.data);
+          return;
+        }
+
+        fetch(`${s.apiBaseUrl}/api/me`, {
+          headers: { 'Authorization': `Bearer ${s.accessToken}` }
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.tier) {
+            const planData = { tier: data.tier, total_requests_today: data.total_requests_today };
+            setApiPlanData(planData);
+            chrome.storage.local.set({ 
+              apiPlanCache: { data: planData, expiresAt: now + 10 * 1000 } 
+            });
+            if (data.contextProfile) {
+              const currentCtx = s.contextProfile || {};
+              const isEmpty = Object.values(currentCtx).every(v => !v);
+              if (isEmpty) {
+                persistSettings({ contextProfile: data.contextProfile }).then(setSettings);
+              }
+            }
+          }
+        })
+        .catch(console.error);
+      });
+    };
+
+    getSettings().then((s) => {
+      setSettings(s);
+      if (s?.accessToken && s?.apiBaseUrl) {
+        fetchMe(s);
+      }
+    });
+
+    const onMessage = (msg: any) => {
+      if (msg?.type === "PROMPTLY_PLAN_UPDATED") {
+        getSettings().then(s => {
+          if (s?.accessToken && s?.apiBaseUrl) fetchMe(s);
+        });
+      }
+    };
+    chrome.runtime.onMessage.addListener(onMessage);
+    return () => chrome.runtime.onMessage.removeListener(onMessage);
   }, []);
 
   const update = async (partial: Partial<PromptlySettings>) => {
@@ -33,10 +81,8 @@ export const Popup: React.FC = () => {
       <div className="flex flex-col gap-4 p-5 pb-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[var(--text-primary)] text-[var(--surface-base)] shadow-sm">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-              </svg>
+            <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full shadow-lg border border-[var(--border-subtle)]" style={{ background: 'var(--surface-elevated)' }}>
+              <img src="/promptly-orb.png" alt="Promptly Orb" className="w-full h-full object-cover scale-[1.1]" />
             </div>
             <div>
               <h1 className="font-display text-[15px] font-semibold text-[var(--text-primary)] leading-none mb-1">Promptly</h1>
@@ -106,12 +152,48 @@ export const Popup: React.FC = () => {
               <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Preferences</h2>
               <div className="flex items-center justify-between promptly-card p-3">
                 <div>
-                  <p className="text-[12px] font-medium text-white">Keyboard shortcut</p>
+                  <p className="text-[12px] font-medium text-[var(--text-primary)]">Keyboard shortcut</p>
                   <p className="text-[10.5px] text-[var(--text-tertiary)] mt-0.5">Open optimizer from any input</p>
                 </div>
                 <kbd className="rounded bg-[var(--surface-base)] border border-[var(--border-subtle)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--text-secondary)]">
                   Ctrl+Shift+P
                 </kbd>
+              </div>
+            </section>
+            
+            <div className="minimal-divider" />
+            
+            <section className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Your Plan</h2>
+                <span className="text-[10px] font-semibold bg-[var(--surface-floating)] border border-[var(--border-subtle)] px-2 py-0.5 rounded text-[var(--text-secondary)]">
+                  {apiPlanData?.tier?.toUpperCase() || "FREE"}
+                </span>
+              </div>
+              <div className="promptly-card p-3.5 space-y-3 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-cyan-500/30 via-purple-500/30 to-transparent"></div>
+                <div className="flex justify-between items-end">
+                  <p className="text-[12px] font-medium text-[var(--text-primary)]">
+                    {apiPlanData?.total_requests_today || 0} <span className="text-[var(--text-tertiary)]">/ {apiPlanData?.tier === 'expert' ? '1000' : apiPlanData?.tier === 'pro' ? '25' : '10'} optimizations</span>
+                  </p>
+                </div>
+                <div className="h-1.5 w-full bg-[var(--surface-base)] rounded-full overflow-hidden border border-[var(--border-subtle)]">
+                  <div className="h-full bg-gradient-to-r from-cyan-500 to-purple-500 rounded-full" style={{ width: `${Math.min(100, Math.round(((apiPlanData?.total_requests_today || 0) / (apiPlanData?.tier === 'expert' ? 1000 : apiPlanData?.tier === 'pro' ? 25 : 10)) * 100))}%` }}></div>
+                </div>
+                {apiPlanData?.tier !== 'expert' && (
+                  <button 
+                    onClick={() => window.open(`${settings.apiBaseUrl}/dashboard`, "_blank")}
+                    className="w-full mt-2 bg-[var(--text-primary)] text-[var(--surface-base)] font-semibold text-[11px] py-2 rounded-md hover:opacity-90 transition-opacity">
+                    Upgrade Plan
+                  </button>
+                )}
+                {apiPlanData?.tier === 'expert' && (
+                  <button 
+                    onClick={() => window.open(`${settings.apiBaseUrl}/dashboard`, "_blank")}
+                    className="w-full mt-2 bg-[var(--surface-floating)] border border-[var(--border-subtle)] text-[var(--text-secondary)] font-semibold text-[11px] py-2 rounded-md hover:text-[var(--text-primary)] transition-colors">
+                    Manage Plan
+                  </button>
+                )}
               </div>
             </section>
           </div>

@@ -57,7 +57,7 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
   };
 
   const stateClass = promptState === "vague" ? "pulse-vague" : promptState === "ready" ? "glow-ready" : "";
-  const imageUrl = chrome.runtime.getURL("public/promptly-orb.png");
+  const imageUrl = chrome.runtime.getURL("promptly-orb.png");
 
   return (
     <button
@@ -67,16 +67,6 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
       onClick={handleClicks}
       onMouseDown={(e) => e.preventDefault()}
       className={`promptly-orb ${compact ? 'compact' : ''} ${loading ? "promptly-loading" : ""} ${active ? "promptly-orb-active" : ""} ${!active && stateClass ? stateClass : ""}`}
-      style={{
-        padding: 0,
-        border: "none",
-        background: "transparent",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        overflow: "visible",
-        boxShadow: "none"
-      }}
     >
       <div className="promptly-loading-ring active" />
       <img
@@ -87,9 +77,10 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
           height: "100%",
           objectFit: "cover",
           borderRadius: "50%",
-          transform: active ? "scale(0.95)" : "scale(1)",
+          transform: active ? "scale(0.95)" : "scale(1.1)",
           transition: "transform 0.2s ease",
-          zIndex: 2
+          zIndex: 2,
+          pointerEvents: "none"
         }}
       />
       {showSuccessRing && <div className="promptly-success-ring" />}

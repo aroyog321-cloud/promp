@@ -100,32 +100,37 @@ async function directAIFetch(endpoint: string, apiKey: string | undefined, messa
   }
 }
 
+function keywordClassify(text: string): PromptMode {
+  const t = text.toLowerCase();
+  if (/\b(money|income|earn|profit|cash|wealth|affiliate|ecommerce|side[- ]hustle|passive[- ]income|monetiz|invest|trading|crypto)\b/.test(t)) return "business";
+  if (/\b(code|function|api|database|bug|typescript|python|react|sql|deploy|refactor|implement)\b/.test(t)) return "developer";
+  if (/\b(design|mockup|wireframe|ux|ui|figma|typography|color|logo)\b/.test(t)) return "designer";
+  if (/\b(marketing|campaign|ad copy|seo|funnel|landing page|lead magnet|growth)\b/.test(t)) return "marketing";
+  if (/\b(research|study|paper|evidence|citation|thesis|literature)\b/.test(t)) return "research";
+  if (/\b(blog|article|story|essay|video script|newsletter|caption|headline|tweet)\b/.test(t)) return "content-creator";
+  if (/\b(mvp|launch|founder|investor|pitch|startup|go-to-market)\b/.test(t)) return "startup-founder";
+  return "general";
+}
+
 async function resolveMode(req: OptimizeRequest, config: { categorizerApiUrl?: string; categorizerApiKey?: string; }): Promise<PromptMode> {
-  let finalMode: PromptMode = req.mode;
-  if (req.mode === "auto") {
-    if (config.categorizerApiUrl) {
-      try {
-        const categorizerPrompt = `Classify this user request into EXACTLY ONE of the following categories: general, developer, designer, marketing, research, business, content-creator, startup-founder. Output ONLY the category name. Do not include punctuation or explanation.\n\nRequest: "${req.text}"`;
-        const isDirectCategorizer = config.categorizerApiUrl.includes('/chat/completions') || config.categorizerApiUrl.includes('/v1');
-        if (isDirectCategorizer) {
-          const endpoint = config.categorizerApiUrl.endsWith('/chat/completions') ? config.categorizerApiUrl : `${config.categorizerApiUrl.replace(/\/+$/, "")}/chat/completions`;
-          const catResult = await directAIFetch(endpoint, config.categorizerApiKey, [{ role: "user", content: categorizerPrompt }], { temperature: 0.1, maxOutputTokens: 20 }, false);
-          const rawCategory = catResult.trim().toLowerCase();
-          if (["general", "developer", "designer", "marketing", "research", "business", "content-creator", "startup-founder"].includes(rawCategory)) {
-            finalMode = rawCategory as any;
-          } else {
-            finalMode = "general";
-          }
+  if (req.mode !== "auto") return req.mode;
+  if (config.categorizerApiUrl) {
+    try {
+      const categorizerPrompt = `Classify this user request into EXACTLY ONE of the following categories: general, developer, designer, marketing, research, business, content-creator, startup-founder. Output ONLY the category name. Do not include punctuation or explanation.\n\nRequest: "${req.text}"`;
+      const isDirectCategorizer = config.categorizerApiUrl.includes('/chat/completions') || config.categorizerApiUrl.includes('/v1');
+      if (isDirectCategorizer) {
+        const endpoint = config.categorizerApiUrl.endsWith('/chat/completions') ? config.categorizerApiUrl : `${config.categorizerApiUrl.replace(/\/+$/, "")}/chat/completions`;
+        const catResult = await directAIFetch(endpoint, config.categorizerApiKey, [{ role: "user", content: categorizerPrompt }], { temperature: 0.1, maxOutputTokens: 20 }, false);
+        const rawCategory = catResult.trim().toLowerCase();
+        if (["general", "developer", "designer", "marketing", "research", "business", "content-creator", "startup-founder"].includes(rawCategory)) {
+          return rawCategory as any;
         }
-      } catch (e) {
-        console.warn("Categorizer API failed, falling back to general", e);
-        finalMode = "general";
       }
-    } else {
-      finalMode = "general";
+    } catch (e) {
+      console.warn("Categorizer API failed, falling back to keyword classify", e);
     }
   }
-  return finalMode;
+  return keywordClassify(req.text);
 }
 
 export async function optimizePrompt(
@@ -133,10 +138,17 @@ export async function optimizePrompt(
   config: { apiBaseUrl?: string; apiKey?: string; categorizerApiUrl?: string; categorizerApiKey?: string; accessToken?: string; },
   options?: { onChunk?: (chunk: string) => void, abortSignal?: AbortSignal }
 ): Promise<OptimizeResponse> {
+  let lastError: Error | undefined;
 
-  const cacheKey = JSON.stringify({ text: req.text, mode: req.mode, level: req.level, refinement: req.refinement });
+  const cacheKey = JSON.stringify({ 
+    text: req.text, 
+    mode: req.mode, 
+    level: req.level, 
+    refinement: req.refinement,
+    previousPrompt: req.previousPrompt
+  });
   if (!req.refinement && PROMPT_CACHE.has(cacheKey) && !options?.onChunk) {
-    return PROMPT_CACHE.get(cacheKey)!;
+    // return PROMPT_CACHE.get(cacheKey)!; // Disabled cache to ensure all history syncs to server
   }
 
   if (config.apiBaseUrl) {
@@ -241,11 +253,15 @@ ${draftText}`;
           } catch (e) {}
           
           if (res.status === 401) {
-            // Token is invalid/expired. Clear it.
-            chrome.storage.sync.get("promptly_settings_v1", (res) => {
-              const current = res.promptly_settings_v1 || {};
-              chrome.storage.sync.set({ promptly_settings_v1: { ...current, accessToken: "" } });
-            });
+            // Token is invalid/expired. Request re-auth instead of wiping permanently.
+            if (typeof chrome !== 'undefined' && chrome.tabs) {
+              chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                if (tabs[0]?.id) {
+                  chrome.tabs.sendMessage(tabs[0].id, { type: "PROMPTLY_REAUTH_REQUEST" });
+                }
+              });
+              chrome.storage.local.remove('apiPlanCache');
+            }
           }
           throw new Error(errorMsg);
         }
@@ -300,10 +316,16 @@ ${draftText}`;
         throw e; // Do not fallback to local if unauthorized
       }
       console.warn("API Optimization failed, falling back to local template", e);
+      lastError = e as Error;
     }
   }
   
-  const localResponse: OptimizeResponse = { optimized: localOptimize(req), source: "local-fallback" };
+  const localResponse: OptimizeResponse = { 
+    optimized: localOptimize(req), 
+    source: "local-fallback",
+    degraded: true,
+    degradedReason: lastError ? lastError.message : "API URL missing or unreachable"
+  };
   if (!req.refinement) PROMPT_CACHE.set(cacheKey, localResponse);
   
   if (options?.onChunk) {

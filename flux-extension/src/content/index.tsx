@@ -64,8 +64,18 @@ function bootstrap(platform: PlatformConfig) {
   );
 }
 
+const Toast: React.FC<{ message: string, type: 'error' | 'success' | 'info', onClose: () => void }> = ({ message, type, onClose }) => {
+  return (
+    <div className={`promptly-toast promptly-toast-${type}`}>
+      <span>{message}</span>
+      <button onClick={onClose} aria-label="Close" className="promptly-toast-close">&times;</button>
+    </div>
+  );
+};
+
 const PromptlyApp: React.FC<{ platform: PlatformConfig }> = ({ platform }) => {
   const [position, setPosition] = React.useState<{ top: number; left: number } | null>(null);
+  const [orbOffset, setOrbOffset] = React.useState<{ x: number, y: number }>({ x: 0, y: 0 });
   const [open, setOpen] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [originalText, setOriginalText] = React.useState("");
@@ -73,16 +83,30 @@ const PromptlyApp: React.FC<{ platform: PlatformConfig }> = ({ platform }) => {
   const [settings, setSettings] = React.useState<PromptlySettings | null>(null);
   const [success, setSuccess] = React.useState(false);
   const [orbLoading, setOrbLoading] = React.useState(false);
+  
+  const [showOnboarding, setShowOnboarding] = React.useState(false);
+  const [toast, setToast] = React.useState<{ message: string, type: 'error' | 'success' | 'info' } | null>(null);
+  
   const inputRef = React.useRef<HTMLElement | null>(null);
-
   const history = useHistory();
+
+  const showToast = (message: string, type: 'error' | 'success' | 'info' = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   React.useEffect(() => {
     getSettings().then(setSettings);
     onSettingsChanged(setSettings);
+
+    chrome.storage.local.get(['hasSeenOnboarding'], (res) => {
+      if (!res.hasSeenOnboarding) {
+        setShowOnboarding(true);
+        chrome.storage.local.set({ hasSeenOnboarding: true });
+      }
+    });
   }, []);
 
-  // Locate the chat input and position the button beside it.
   React.useEffect(() => {
     const update = () => {
       const input = findInputElement(platform);
@@ -102,10 +126,8 @@ const PromptlyApp: React.FC<{ platform: PlatformConfig }> = ({ platform }) => {
       }
       const orbSize = 40;
       const margin = 8;
-      // Vertically center the orb on the input's midpoint, but clamp to viewport
       const desiredTop = rect.top + rect.height / 2 - orbSize / 2;
       const newTop = Math.max(margin, Math.min(desiredTop, window.innerHeight - orbSize - margin));
-      // Horizontally place to the right of the input, but clamp to viewport
       const desiredLeft = rect.right + 10;
       const newLeft = Math.max(margin, Math.min(desiredLeft, window.innerWidth - orbSize - margin));
       setPosition((prev) => {
@@ -131,15 +153,30 @@ const PromptlyApp: React.FC<{ platform: PlatformConfig }> = ({ platform }) => {
 
   const [customPosition, setCustomPosition] = React.useState<{ top: number; left: number } | null>(null);
 
-  // Keyboard shortcut + background message handler
   React.useEffect(() => {
     const onMessage = (msg: any) => {
       if (msg?.type === "PROMPTLY_TRIGGER_OPTIMIZE") {
         openPanel();
+      } else if (msg?.type === "PROMPTLY_TRIGGER_AUTO_OPTIMIZE") {
+        handleDoubleClick();
       }
     };
     chrome.runtime.onMessage.addListener(onMessage);
-    return () => chrome.runtime.onMessage.removeListener(onMessage);
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      // Trigger auto-optimize on Alt+Shift+Y or Cmd+Shift+Y
+      if ((e.altKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        e.stopPropagation();
+        handleDoubleClick();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+
+    return () => {
+      chrome.runtime.onMessage.removeListener(onMessage);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
   }, [settings]);
 
   const openPanel = () => {
@@ -151,21 +188,40 @@ const PromptlyApp: React.FC<{ platform: PlatformConfig }> = ({ platform }) => {
       console.warn("Promptly: Failed to read input text", e);
       setOriginalText("");
     }
-    setCustomPosition(null); // Reset position on open
+    setCustomPosition(null);
     setOpen(true);
+    setShowOnboarding(false);
+  };
+
+  const playSuccessSound = () => {
+    // Subtle, muted "pop" sound using base64
+    const audio = new Audio("data:audio/mp3;base64,//NExAAAAANIAAAAAExBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq");
+    audio.volume = 0.2;
+    audio.play().catch(() => {});
   };
 
   const handleReplace = async (text: string) => {
     setOpen(false);
     setSuccess(true);
+    playSuccessSound();
     setTimeout(() => setSuccess(false), 800);
 
     const input = inputRef.current ?? findInputElement(platform);
     if (!input) return;
 
-    // Insert text directly to avoid breaking complex React/contenteditable inputs
     writeInputText(input, text);
   };
+
+  const lastAutoRef = React.useRef<{ original: string, optimized: string } | null>(null);
+
+  function normalizeForCompare(s: string): string {
+    return s.trim()
+      .replace(/[\u201c\u201d]/g, '"')
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/\r\n/g, "\n")
+      .replace(/[\u00a0\u200b]/g, " ")
+      .replace(/\s+/g, " ");
+  }
 
   const handleDoubleClick = async () => {
     const input = findInputElement(platform);
@@ -179,19 +235,39 @@ const PromptlyApp: React.FC<{ platform: PlatformConfig }> = ({ platform }) => {
       return;
     }
 
+    let isRegenerating = false;
+    if (lastAutoRef.current && normalizeForCompare(textToOptimize) === normalizeForCompare(lastAutoRef.current.optimized)) {
+      textToOptimize = lastAutoRef.current.original;
+      isRegenerating = true;
+      showToast("Regenerating from your original input...", "info");
+    }
+
     if (!textToOptimize.trim()) {
-      alert("Please type a prompt first before auto-optimizing!");
+      showToast("Please type a prompt first before auto-optimizing!", "error");
       return;
     }
 
     setOrbLoading(true);
 
     try {
+      // Respect medium/aggressive/expert. If light or undefined, boost to aggressive.
+      const level = (!settings.defaultLevel || settings.defaultLevel === "light") ? "aggressive" : settings.defaultLevel;
+
+      if (!isRegenerating && settings.defaultMode === "auto") {
+        showToast("Auto-detecting mode...", "info");
+      }
+
       const result = await optimizePrompt({
         text: textToOptimize,
-        mode: "auto", // Auto-detect mode
-        level: settings.defaultLevel || "medium", // Continue using user's configured level
-        style: settings.defaultStyle || "neutral", // Continue using user's configured style
+        ...(isRegenerating && lastAutoRef.current
+          ? { 
+              previousPrompt: lastAutoRef.current.optimized, 
+              refinement: "Produce a structurally different rewrite. Use a different section ordering, a different opening framing, and avoid reusing the exact phrasing or headings from the previous version. Keep the same intent." 
+            }
+          : {}),
+        mode: settings.defaultMode || "auto",
+        level,
+        style: settings.defaultStyle || "neutral",
         context: settings.contextInjectionEnabled ? settings.contextProfile : undefined,
         stream: false,
         platform: window.location.hostname
@@ -203,25 +279,29 @@ const PromptlyApp: React.FC<{ platform: PlatformConfig }> = ({ platform }) => {
         accessToken: settings.accessToken
       });
 
-      // Write result directly into input
+      if (result.degraded) {
+        showToast(`Optimized with local fallback (lower quality): ${result.degradedReason}`, "info");
+      }
+
       writeInputText(input, result.optimized);
 
-      // Add optimized prompt to history
       history.add({
         text: textToOptimize,
         optimized: result.optimized,
         mode: "auto",
-        level: settings.defaultLevel || "medium",
+        level,
         platform: window.location.hostname,
         source: result.source as any
       });
 
-      // Success feedback animation
+      lastAutoRef.current = { original: textToOptimize, optimized: result.optimized };
+
       setSuccess(true);
+      playSuccessSound();
       setTimeout(() => setSuccess(false), 800);
     } catch (err: any) {
       console.error("Promptly Auto-Optimize failed:", err);
-      alert(`Promptly Auto-Optimize failed: ${err.message || err}`);
+      showToast(`Optimization failed: ${err.message || err}`, "error");
     } finally {
       setOrbLoading(false);
     }
@@ -232,24 +312,23 @@ const PromptlyApp: React.FC<{ platform: PlatformConfig }> = ({ platform }) => {
   const panelWidth = 480;
   const panelMaxHeight = 520;
   const margin = 16;
-  const orbSize = 36; // the promptly-orb size
+  const orbSize = 36;
 
-  let panelTop: number = position.top;
-  let panelLeft: number = position.left + orbSize + 10;
+  const orbTop = position.top + orbOffset.y;
+  const orbLeft = position.left + orbOffset.x;
 
-  // Clamp vertically if it goes off the bottom of the screen
-  if (position.top + panelMaxHeight > window.innerHeight) {
-    const overflow = position.top + panelMaxHeight - window.innerHeight + margin;
-    panelTop = Math.max(margin, position.top - overflow);
+  let panelTop: number = orbTop;
+  let panelLeft: number = orbLeft + orbSize + 10;
+
+  if (orbTop + panelMaxHeight > window.innerHeight) {
+    const overflow = orbTop + panelMaxHeight - window.innerHeight + margin;
+    panelTop = Math.max(margin, orbTop - overflow);
   }
 
-  // Clamp horizontally if it goes off the right of the screen
-  if (position.left + orbSize + 10 + panelWidth > window.innerWidth) {
-    // Render to the left of the orb instead
-    panelLeft = position.left - panelWidth - 10;
+  if (orbLeft + orbSize + 10 + panelWidth > window.innerWidth) {
+    panelLeft = orbLeft - panelWidth - 10;
   }
 
-  // Use custom position if user has dragged
   const finalTop = customPosition ? customPosition.top : panelTop;
   const finalLeft = customPosition ? customPosition.left : panelLeft;
 
@@ -259,7 +338,11 @@ const PromptlyApp: React.FC<{ platform: PlatformConfig }> = ({ platform }) => {
 
   return (
     <>
-      <div style={{ position: "fixed", top: position.top, left: position.left, pointerEvents: "auto", zIndex: 2147483647 }}>
+      <DraggableOrb 
+        top={orbTop} 
+        left={orbLeft} 
+        onDrag={(dy, dx) => setOrbOffset(prev => ({ y: prev.y + dy, x: prev.x + dx }))}
+      >
         <FloatingButton 
           loading={orbLoading} 
           active={open} 
@@ -268,7 +351,15 @@ const PromptlyApp: React.FC<{ platform: PlatformConfig }> = ({ platform }) => {
           onDoubleClick={handleDoubleClick}
           success={success} 
         />
-      </div>
+        {showOnboarding && (
+          <div className="promptly-onboarding-tooltip">
+            <strong>Welcome to Promptly!</strong>
+            <p>Click once to refine, double-click to auto-optimize, Ctrl+Shift+P to open, Alt+Shift+Y to auto-optimize.</p>
+            <button onClick={() => setShowOnboarding(false)}>Got it</button>
+          </div>
+        )}
+      </DraggableOrb>
+      
       {open && (
         <DraggablePanel 
           initialTop={finalTop} 
@@ -279,20 +370,94 @@ const PromptlyApp: React.FC<{ platform: PlatformConfig }> = ({ platform }) => {
             initialText={originalText}
             onReplace={handleReplace}
             onClose={() => setOpen(false)}
-            onOpenHistory={() => setHistoryOpen(true)}
+            onOpenHistory={() => {
+              setOpen(false);
+              setHistoryOpen(true);
+            }}
           />
         </DraggablePanel>
       )}
+      
       <HistoryPanel
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
         onSelect={(entry) => {
           setOriginalText(entry.text);
           setOpen(true);
-          // To fully support loading 'optimized' we would need to pass it to OptimizerPanel
         }}
       />
+      
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
     </>
+  );
+};
+
+const DraggableOrb: React.FC<{
+  top: number;
+  left: number;
+  onDrag: (dy: number, dx: number) => void;
+  children: React.ReactNode;
+}> = ({ top, left, onDrag, children }) => {
+  const [isDragging, setIsDragging] = React.useState(false);
+  const dragStart = React.useRef<{ x: number, y: number } | null>(null);
+  const hasMoved = React.useRef(false);
+
+  React.useEffect(() => {
+    const handlePointerMove = (e: PointerEvent) => {
+      if (dragStart.current) {
+        const dx = e.clientX - dragStart.current.x;
+        const dy = e.clientY - dragStart.current.y;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+          setIsDragging(true);
+          hasMoved.current = true;
+          onDrag(dy, dx);
+          dragStart.current = { x: e.clientX, y: e.clientY };
+        }
+      }
+    };
+
+    const handlePointerUp = (e: PointerEvent) => {
+      if (isDragging) {
+        setTimeout(() => setIsDragging(false), 50);
+      }
+      dragStart.current = null;
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [onDrag, isDragging]);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    dragStart.current = { x: e.clientX, y: e.clientY };
+    hasMoved.current = false;
+  };
+
+  return (
+    <div 
+      style={{ 
+        position: "fixed", 
+        top,
+        left,
+        pointerEvents: "auto",
+        zIndex: 2147483647
+      }}
+      onPointerDown={handlePointerDown}
+      onClickCapture={(e) => {
+        if (hasMoved.current) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      }}
+    >
+      {children}
+    </div>
   );
 };
 
@@ -306,7 +471,6 @@ const DraggablePanel: React.FC<{
   const dragStart = React.useRef<{ x: number, y: number, startTop: number, startLeft: number } | null>(null);
 
   const handlePointerDown = (e: React.PointerEvent) => {
-    // Only drag if clicking the header area
     const target = e.target as HTMLElement;
     if (target.closest('.promptly-header') && !target.closest('button') && !target.closest('select')) {
       setIsDragging(true);
@@ -355,7 +519,6 @@ const DraggablePanel: React.FC<{
   );
 };
 
-// Execute bootstrap after all declarations are processed
 (() => {
   const platform = detectPlatform(window.location.hostname);
   if (platform) {

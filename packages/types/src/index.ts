@@ -95,6 +95,8 @@ export interface OptimizeRequest {
 export interface OptimizeResponse {
   optimized: string;
   source: "api" | "local-fallback";
+  degraded?: boolean;
+  degradedReason?: string;
 }
 
 export type SubscriptionTier = "free" | "pro" | "expert";

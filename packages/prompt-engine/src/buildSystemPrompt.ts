@@ -13,18 +13,24 @@ export function buildSystemPrompt(mode: PromptMode, level: RewriteLevel, platfor
   prompt += `## PERSONA\nYou are rewriting on behalf of:\n${recipe.persona}\n\n`;
   prompt += `## TASK TYPE\n${recipe.taskHint}\n\n`;
   
-  if (levelConfig.addSections) {
-    prompt += `## SECTION ORDER\nUse these sections, in this order, unless the task clearly doesn't fit:\n${recipe.structuralShape.map(s => `- ${s}`).join('\n')}\n\n`;
+  if (levelConfig.minStructure !== "inline") {
+    prompt += `## STRUCTURAL MINIMUM\nThe rewritten prompt MUST include at minimum these sections (you may add more):\n${recipe.structuralShape.slice(0, levelConfig.minStructure === "headed" ? 3 : levelConfig.minStructure === "multi-section" ? 6 : recipe.structuralShape.length).map(s => `- ${s}`).join('\n')}\n\n`;
   }
 
-  prompt += `## METHOD\nFor every rewrite, follow this exact sequence:\n`;
-  prompt += `1. DRAFT the rewrite. Apply CO-STAR: Context, Objective, Style, Tone, Audience, Response format. Use Markdown with stable section headings.\n`;
+  prompt += `## DEPTH MATCHING
+- Match the rewritten prompt's depth to BOTH the user's input AND the requested level (${level}).
+- For "${level}" level, never produce a one-line output. Always include the structural elements specified in STRUCTURAL MINIMUM.
+- If the user's input is vague (e.g., "best productivity tools"), DO compensate with concrete assumptions in Context — not by removing sections. The prompt should be sharp AND comprehensive.
+
+## METHOD\nFor every rewrite:\n`;
+  prompt += `1. DRAFT a rewritten prompt that meets STRUCTURAL MINIMUM for level "${level}" and addresses the rubric below.\n`;
+  prompt += `2. Apply CO-STAR where appropriate. Use the mode-specific persona (${mode}).\n`;
 
   if (levelConfig.twoPassCritique) {
-    prompt += `2. CRITIQUE your draft against the rubric below. If any check fails, revise.\n`;
-    prompt += `3. RETURN only the final revised prompt. No preamble, no quotes, no "Here's the rewritten prompt:", no explanations.\n\n`;
+    prompt += `3. CRITIQUE your draft against the rubric below. If any check fails, revise.\n`;
+    prompt += `4. RETURN only the final revised prompt. No preamble, no quotes, no explanations.\n\n`;
   } else {
-    prompt += `2. RETURN only the final rewritten prompt. No preamble, no quotes, no "Here's the rewritten prompt:", no explanations.\n\n`;
+    prompt += `3. RETURN only the final rewritten prompt. No preamble, no quotes, no "Here's the rewritten prompt:", no explanations.\n\n`;
   }
 
   prompt += `## QUALITY RUBRIC — every rewritten prompt MUST satisfy all of these
@@ -32,8 +38,9 @@ export function buildSystemPrompt(mode: PromptMode, level: RewriteLevel, platfor
 - CONTEXT: Names who the user is, what they're trying to do, and the relevant background — concrete, not generic.
 - OBJECTIVE: A single, sharply-defined deliverable. Replace vague words ("good", "better", "fast", "nice") with measurable criteria (length, structure, tone, audience).
 - CONSTRAINTS: At least 2 negative constraints ("Do NOT use X", "Avoid Y").
-- OUTPUT FORMAT: Specifies exact structure (sections, length, format). Use Markdown headings. For complex tasks, use XML tags inside the prompt — they work very well with Claude and GPT-4+.
+- OUTPUT FORMAT: Use Markdown headings for structure.
 - SUCCESS CRITERIA: What "done well" looks like. How will the reader judge success?
+- GRAMMAR & CLARITY: You MUST fix any typos, spelling mistakes, or poor grammar from the user's original input. DO NOT copy typos into the final prompt.
 `;
 
   if (isExpert) {

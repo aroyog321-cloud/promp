@@ -29,7 +29,11 @@
     "https://claude.ai/*",
     "https://www.perplexity.ai/*",
     "https://grok.com/*",
-    "https://chat.deepseek.com/*"
+    "https://chat.deepseek.com/*",
+    "http://localhost:3000/*",
+    "http://127.0.0.1:3000/*",
+    "https://*.vercel.app/*",
+    "https://*.promptly.com/*"
   ],
   "content_scripts": [
     {
@@ -50,7 +54,9 @@
       "matches": [
         "http://localhost:3000/*",
         "http://127.0.0.1:3000/*",
-        "https://*.vercel.app/*"
+        "https://*.vercel.app/*",
+        "https://*.promptly.com/*",
+        "https://promptly.com/*"
       ],
       "js": ["src/content/authSync.ts"],
       "run_at": "document_start"
@@ -63,6 +69,13 @@
         "mac": "Command+Shift+P"
       },
       "description": "Optimize the current prompt with Promptly"
+    },
+    "auto-optimize-prompt": {
+      "suggested_key": {
+        "default": "Alt+Shift+Y",
+        "mac": "Alt+Shift+Y"
+      },
+      "description": "Auto-optimize immediately (Double Orb action)"
     }
   },
   "web_accessible_resources": [

@@ -5,12 +5,10 @@ import type { RewriteLevel } from "@promptly/types";
  * the LLM uses) and the user prompt (what the rewritten prompt must include).
  */
 export interface LevelConfig {
-  /** Short label for the current pass (visible in the system prompt). */
   framework: "polish" | "structure" | "engineer" | "strategize";
-  /** Bullet list of requirements for the rewritten prompt. */
   instructions: string[];
-  /** Whether the rewritten prompt should use full Markdown sections. */
-  addSections: boolean;
+  /** Minimum structural depth: 'inline' | 'headed' | 'multi-section' | 'full-recipe' */
+  minStructure: "inline" | "headed" | "multi-section" | "full-recipe";
   /** Whether to run a 2-pass critique (draft → critique → revise). */
   twoPassCritique: boolean;
   /** Which few-shot examples to show (1-based; pass [] for none). */
@@ -20,54 +18,55 @@ export interface LevelConfig {
 export const LEVEL_CONFIGS: Record<RewriteLevel, LevelConfig> = {
   light: {
     framework: "polish",
-    instructions: [
-      "Fix ambiguity.",
-      "Correct grammar and spelling.",
-      "Ensure the core intent is crystal clear.",
-      "Keep the original phrasing largely intact.",
-    ],
-    addSections: false,
+    minStructure: "inline",
     twoPassCritique: false,
     examplesToShow: [1],
+    instructions: [
+      "Fix ambiguity.",
+      "Ensure the core intent is crystal clear.",
+      "Correct all spelling and grammatical errors from the raw input before generating the prompt.",
+      "Keep the original phrasing largely intact.",
+    ],
   },
   medium: {
     framework: "structure",
-    instructions: [
-      "Establish a clear Role → Task → Format flow.",
-      "Fill in obvious missing context.",
-      "Add 3-5 essential requirements.",
-      "Specify the desired output format (length, structure, tone).",
-      "Use Markdown headings. Use stable section names.",
-    ],
-    addSections: true,
+    minStructure: "headed",
     twoPassCritique: false,
     examplesToShow: [1, 2],
+    instructions: [
+      "Correct all spelling and grammatical errors from the raw input before generating the prompt.",
+      "Establish a clear Role → Task → Format flow.",
+      "Fill in obvious missing context.",
+      "Specify the desired output format (length, structure, tone).",
+    ],
   },
   aggressive: {
     framework: "engineer",
+    minStructure: "multi-section",
+    twoPassCritique: true,
+    examplesToShow: [1, 2],
     instructions: [
+      "Correct all spelling and grammatical errors from the raw input before generating the prompt.",
       "Apply the CO-STAR framework fully (Context, Objective, Style, Tone, Audience, Response).",
       "Include negative constraints — at least 2 'Do NOT' / 'Avoid' rules.",
       "Define a specific, high-quality output format (sections, length, structure).",
       "Inject strategic assumptions into the Context section so the model doesn't have to guess.",
       "Include explicit success criteria so the reader knows when the output is good.",
     ],
-    addSections: true,
-    twoPassCritique: true,
-    examplesToShow: [1, 2],
   },
   expert: {
     framework: "strategize",
+    minStructure: "full-recipe",
+    twoPassCritique: true,
+    examplesToShow: [1, 2],
     instructions: [
-      "Apply CO-STAR + a domain-appropriate structural recipe (see STRUCTURAL RECIPES).",
+      "Correct all spelling and grammatical errors from the raw input before generating the prompt.",
+      "Apply CO-STAR + the mode-specific structural recipe in full.",
       "Include at least 2 negative constraints.",
       "Define rigorous, measurable success criteria.",
       "Include an Edge Cases / Failure Modes section that names specific risks.",
-      "Use Markdown for structure. For complex tasks, use XML tags (<context>, <task>, <constraints>) — they work very well with Claude and GPT-4+.",
-      "Apply anti-hallucination discipline: do not invent APIs, citations, statistics, or product features the user did not provide.",
+      "Apply anti-hallucination discipline.",
+      "Use Markdown for structure. For complex tasks, use XML tags (<context>, <task>, <constraints>).",
     ],
-    addSections: true,
-    twoPassCritique: true,
-    examplesToShow: [1, 2],
   },
 };

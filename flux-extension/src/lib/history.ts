@@ -51,14 +51,52 @@ async function writeStorage(entries: HistoryEntry[]): Promise<void> {
   await chrome.storage.local.set({ [STORAGE_KEY]: entries });
 }
 
+import { getSettings } from "./storage";
+
 export const useHistory = create<HistoryState>((set, get) => ({
   entries: [],
   hydrated: false,
 
   hydrate: async () => {
     if (get().hydrated) return;
-    const entries = await readStorage();
-    set({ entries, hydrated: true });
+    const localEntries = await readStorage();
+    let finalEntries = [...localEntries];
+    
+    try {
+      const settings = await getSettings();
+      if (settings.apiBaseUrl && settings.accessToken) {
+        const endpoint = `${settings.apiBaseUrl.replace(/\/$/, "")}/api/history?limit=${MAX_ENTRIES}`;
+        const res = await fetch(endpoint, {
+          headers: { Authorization: `Bearer ${settings.accessToken}` }
+        });
+        if (res.ok) {
+          const serverEntries = await res.json();
+          // Merge server and local, deduping by ID or text
+          const merged = new Map<string, HistoryEntry>();
+          serverEntries.forEach((se: any) => {
+             merged.set(se.id, {
+               id: se.id,
+               text: se.originalPrompt,
+               optimized: se.optimizedPrompt,
+               platform: se.platformUsed,
+               mode: se.promptMode || "auto",
+               level: se.rewriteLevel || "medium",
+               ts: new Date(se.createdAt).getTime(),
+               source: "api"
+             });
+          });
+          localEntries.forEach(le => {
+             if (!merged.has(le.id)) merged.set(le.id, le);
+          });
+          finalEntries = Array.from(merged.values()).sort((a, b) => b.ts - a.ts).slice(0, MAX_ENTRIES);
+          await writeStorage(finalEntries);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to hydrate history from server", e);
+    }
+    
+    set({ entries: finalEntries, hydrated: true });
   },
 
   add: async (partial) => {
@@ -70,6 +108,31 @@ export const useHistory = create<HistoryState>((set, get) => ({
     const next = [entry, ...get().entries].slice(0, MAX_ENTRIES);
     set({ entries: next });
     await writeStorage(next);
+
+    // Sync to backend if it's a local fallback or we just want to ensure it's logged
+    try {
+      const settings = await getSettings();
+      if (settings.apiBaseUrl && settings.accessToken) {
+        const endpoint = `${settings.apiBaseUrl.replace(/\/$/, "")}/api/history`;
+        await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${settings.accessToken}`
+          },
+          body: JSON.stringify({
+            originalPrompt: entry.text,
+            optimizedPrompt: entry.optimized,
+            platformUsed: entry.platform,
+            promptMode: entry.mode,
+            rewriteLevel: entry.level
+          })
+        });
+      }
+    } catch (e) {
+      console.warn("Failed to sync history to server", e);
+    }
+
     return entry;
   },
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useHistory, HistoryEntry, formatRelative } from "../lib/history";
 
 interface HistoryPanelProps {
@@ -18,12 +18,42 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({ open, onClose, onSel
 
   if (!open) return null;
 
-  const displayedEntries = entries.filter(e => {
-    if (tab === "library" && !e.isStarred) return false;
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return e.text.toLowerCase().includes(q) || e.optimized.toLowerCase().includes(q);
-  });
+  const displayedEntries = useMemo(() => {
+    return entries.filter(e => {
+      if (tab === "library" && !e.isStarred) return false;
+      if (!search) return true;
+      const q = search.toLowerCase();
+      return e.text.toLowerCase().includes(q) || e.optimized.toLowerCase().includes(q);
+    });
+  }, [entries, tab, search]);
+
+  const groupedEntries = useMemo(() => {
+    const groups: { name: string, entries: HistoryEntry[] }[] = [
+      { name: "Today", entries: [] },
+      { name: "Yesterday", entries: [] },
+      { name: "Earlier", entries: [] }
+    ];
+    
+    if (displayedEntries.length === 0) return groups;
+
+    const todayStr = new Date().toDateString();
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toDateString();
+
+    displayedEntries.forEach(e => {
+      const dStr = new Date(e.ts).toDateString();
+      if (dStr === todayStr) {
+        groups[0].entries.push(e);
+      } else if (dStr === yesterdayStr) {
+        groups[1].entries.push(e);
+      } else {
+        groups[2].entries.push(e);
+      }
+    });
+
+    return groups;
+  }, [displayedEntries]);
 
   return (
     <div className="promptly-history">
@@ -79,42 +109,55 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({ open, onClose, onSel
           </div>
           
           <div className="promptly-history-list">
-            {displayedEntries.map((entry, i) => (
-              <div 
-                key={entry.id} 
-                className="promptly-history-item" 
-                style={{ "--i": i, cursor: "pointer" } as any}
-              >
-                <div className="row" onClick={() => { onSelect(entry); onClose(); }}>
-                  <span className="mode-badge">{entry.mode}</span>
-                  <div className="promptly-mini-bars">
-                    {[1,2,3,4].map(b => (
-                      <span key={b} className={`bar ${b <= (['light','medium','aggressive','expert'].indexOf(entry.level) + 1 || 2) ? 'on' : ''}`} />
-                    ))}
-                  </div>
-                  <span className="time">{formatRelative(entry.ts)}</span>
-                </div>
-                <div className="preview" onClick={() => { onSelect(entry); onClose(); }}>
-                  {entry.optimized || entry.text}
-                </div>
-                <div className="row" style={{ marginTop: 8, justifyContent: "space-between" }}>
-                  <div className="src">Via {entry.source === 'api' ? 'Promptly API' : 'Local Fallback'}</div>
-                  <button 
-                    className="promptly-btn-icon" 
-                    onClick={(e) => { e.stopPropagation(); toggleStar(entry.id); }}
-                    title={entry.isStarred ? "Remove from Library" : "Add to Library"}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill={entry.isStarred ? "var(--primary)" : "none"} stroke={entry.isStarred ? "var(--primary)" : "currentColor"} strokeWidth="2">
-                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            ))}
-            {displayedEntries.length === 0 && (
+            {displayedEntries.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-quaternary)', fontSize: '11px' }}>
                 {tab === "library" && !search ? "No starred prompts yet. Star a prompt in History to add it here." : `No results found for "${search}"`}
               </div>
+            ) : (
+              groupedEntries.map((group) => {
+                const groupName = group.name;
+                const groupEntries = group.entries;
+
+                if (groupEntries.length === 0) return null;
+
+                return (
+                  <div key={groupName} className="promptly-history-group">
+                    <div className="promptly-history-group-title">{groupName}</div>
+                    {groupEntries.map((entry, i) => (
+                      <div 
+                        key={entry.id} 
+                        className="promptly-history-item" 
+                        style={{ "--i": i, cursor: "pointer" } as any}
+                      >
+                        <div className="row" onClick={() => { onSelect(entry); onClose(); }}>
+                          <span className="mode-badge">{entry.mode}</span>
+                          <div className="promptly-mini-bars">
+                            {[1,2,3,4].map(b => (
+                              <span key={b} className={`bar ${b <= (['light','medium','aggressive','expert'].indexOf(entry.level) + 1 || 2) ? 'on' : ''}`} />
+                            ))}
+                          </div>
+                          <span className="time">{formatRelative(entry.ts)}</span>
+                        </div>
+                        <div className="preview" onClick={() => { onSelect(entry); onClose(); }}>
+                          {entry.optimized || entry.text}
+                        </div>
+                        <div className="row" style={{ marginTop: 8, justifyContent: "space-between" }}>
+                          <div className="src">Via {entry.source === 'api' ? 'Promptly API' : 'Local Fallback'}</div>
+                          <button 
+                            className="promptly-btn-icon" 
+                            onClick={(e) => { e.stopPropagation(); toggleStar(entry.id); }}
+                            title={entry.isStarred ? "Remove from Library" : "Add to Library"}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill={entry.isStarred ? "var(--primary)" : "none"} stroke={entry.isStarred ? "var(--primary)" : "currentColor"} strokeWidth="2">
+                              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })
             )}
           </div>
         </>
