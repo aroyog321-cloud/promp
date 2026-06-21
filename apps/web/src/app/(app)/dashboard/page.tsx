@@ -279,12 +279,7 @@ export default function DashboardPage() {
                   </button>
                 </div>
               </div>
-            ))}
-            
-            {recentPrompts.length === 0 && (
-              <div className="px-6 py-12 text-center">
-                <p className="text-zinc-500 text-sm">No recent optimizations found.</p>
-              </div>
+              ))
             )}
           </div>
         </div>
