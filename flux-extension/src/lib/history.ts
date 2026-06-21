@@ -113,10 +113,8 @@ export const useHistory = create<HistoryState>((set, get) => ({
       try {
         const settings = await getSettings();
         const CORRECT_URL = "https://prompweb.vercel.app";
-        const wrongUrls = ["https://api.promptly-optimizer.app", "http://localhost:3000", "http://127.0.0.1:3000"];
-        // Prefer caller-supplied auth (live from component state) over stale chrome.storage values
-        const rawUrl = auth?.apiBaseUrl || settings.apiBaseUrl;
-        const apiBaseUrl = (!rawUrl || wrongUrls.includes(rawUrl)) ? CORRECT_URL : rawUrl;
+        // Always use production url for sync
+        const apiBaseUrl = CORRECT_URL;
         const accessToken = auth?.accessToken || settings.accessToken;
 
         if (apiBaseUrl && accessToken) {
@@ -178,7 +176,7 @@ export const useHistory = create<HistoryState>((set, get) => ({
     try {
       const settings = await getSettings();
       const CORRECT_URL = "https://prompweb.vercel.app";
-      const wrongUrls = ["https://api.promptly-optimizer.app", "http://localhost:3000", "http://127.0.0.1:3000"];
+      const wrongUrls = ["https://api.promptly-optimizer.app"];
       const rawUrl = settings.apiBaseUrl;
       const apiBaseUrl = (!rawUrl || wrongUrls.includes(rawUrl)) ? CORRECT_URL : rawUrl;
       const accessToken = settings.accessToken;

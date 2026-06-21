@@ -286,8 +286,10 @@ const PromptlyApp: React.FC<{ platform: PlatformConfig }> = ({ platform }) => {
       writeInputText(input, result.optimized);
 
       // Direct server sync — don't depend on history store auth state
-      const SYNC_URL = "https://prompweb.vercel.app";
       const token = settings.accessToken;
+      // Always use Vercel in production
+      const SYNC_URL = "https://prompweb.vercel.app";
+      
       if (token) {
         fetch(`${SYNC_URL}/api/history`, {
           method: "POST",

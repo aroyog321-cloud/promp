@@ -13,6 +13,7 @@ function getAuthToken(request: Request) {
 
 async function getUser(token: string) {
   const { data: { user }, error } = await supabase.auth.getUser(token);
+  if (error) console.error("getUser error:", error);
   return error ? null : user;
 }
 
