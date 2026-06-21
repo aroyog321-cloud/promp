@@ -113,8 +113,14 @@ export const useHistory = create<HistoryState>((set, get) => ({
     {
       try {
         const settings = await getSettings();
-        if (settings.apiBaseUrl && settings.accessToken) {
-          const endpoint = `${settings.apiBaseUrl.replace(/\/$/, "")}/api/history`;
+        const CORRECT_URL = "https://prompweb.vercel.app";
+        const wrongUrls = ["https://api.promptly-optimizer.app", "http://localhost:3000", "http://127.0.0.1:3000"];
+        const apiBaseUrl = (!settings.apiBaseUrl || wrongUrls.includes(settings.apiBaseUrl))
+          ? CORRECT_URL
+          : settings.apiBaseUrl;
+
+        if (apiBaseUrl && settings.accessToken) {
+          const endpoint = `${apiBaseUrl.replace(/\/$/, "")}/api/history`;
           const res = await fetch(endpoint, {
             method: "POST",
             headers: {
