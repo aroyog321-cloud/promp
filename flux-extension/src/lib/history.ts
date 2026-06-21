@@ -109,8 +109,8 @@ export const useHistory = create<HistoryState>((set, get) => ({
     set({ entries: next });
     await writeStorage(next);
 
-    // Sync to backend if it's a local fallback or we just want to ensure it's logged
-    if (partial.source === "local-fallback" || !partial.source) {
+    // Always sync to backend to ensure it's logged
+    {
       try {
         const settings = await getSettings();
         if (settings.apiBaseUrl && settings.accessToken) {

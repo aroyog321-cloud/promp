@@ -97,18 +97,8 @@ function createOpenAIStream(response: Response, logData?: { user: any, body: any
       }
     },
     async flush() {
-      if (logData && logData.user && !logData.supabaseUrl.includes('placeholder')) {
-        const { error: insertError } = await supabase.from('PromptHistory').insert({
-          id: crypto.randomUUID(),
-          userId: logData.user.id,
-          originalPrompt: logData.body.text,
-          optimizedPrompt: accumulatedText.trim(),
-          platformUsed: logData.platform || "api",
-          promptMode: logData.body.mode.replace(/-/g, '_').toUpperCase(),
-          rewriteLevel: logData.body.level.toUpperCase(),
-        });
-        if (insertError) console.error("Failed to log prompt history (streamed):", insertError);
-      }
+      // The extension will handle logging this prompt to the history via /api/history
+      // to avoid dual-writes and RLS silent failures.
     }
   });
 
@@ -126,18 +116,7 @@ function createOpenAIStream(response: Response, logData?: { user: any, body: any
       controller.close();
     },
     async cancel() {
-      // Client disconnected early — persist what we have so far!
-      if (accumulatedText.trim().length > 10 && logData && logData.user && !logData.supabaseUrl.includes('placeholder')) {
-        supabase.from('PromptHistory').insert({
-          id: crypto.randomUUID(),
-          userId: logData.user.id,
-          originalPrompt: logData.body.text,
-          optimizedPrompt: accumulatedText.trim() + " [truncated]",
-          platformUsed: logData.platform || "api",
-          promptMode: logData.body.mode.replace(/-/g, '_').toUpperCase(),
-          rewriteLevel: logData.body.level.toUpperCase(),
-        }).then(() => {});
-      }
+      // The extension handles logging to history.
     }
   });
 
@@ -298,19 +277,7 @@ ${draftText}`;
         const finalData = await finalRes.json();
         const optimizedText = finalData.candidates[0].content.parts[0].text.trim();
         
-        // Log to Supabase
-        if (user && !supabaseUrl.includes('placeholder')) {
-          const { error: insertError } = await supabase.from('PromptHistory').insert({
-            id: crypto.randomUUID(),
-            userId: user.id,
-            originalPrompt: body.text,
-            optimizedPrompt: optimizedText,
-            platformUsed: platform || "api",
-            promptMode: body.mode.replace(/-/g, '_').toUpperCase(),
-            rewriteLevel: body.level.toUpperCase(),
-          });
-          if (insertError) console.error("Failed to log prompt history:", insertError);
-        }
+        // The extension will handle logging this prompt to the history via /api/history
 
         return NextResponse.json<OptimizeResponse>({
           optimized: optimizedText,
@@ -327,19 +294,7 @@ ${draftText}`;
         const finalData = await finalRes.json();
         const optimizedText = finalData.candidates[0].content.parts[0].text.trim();
         
-        // Log to Supabase
-        if (user && !supabaseUrl.includes('placeholder')) {
-          const { error: insertError } = await supabase.from('PromptHistory').insert({
-            id: crypto.randomUUID(),
-            userId: user.id,
-            originalPrompt: body.text,
-            optimizedPrompt: optimizedText,
-            platformUsed: platform || "api",
-            promptMode: body.mode.replace(/-/g, '_').toUpperCase(),
-            rewriteLevel: body.level.toUpperCase(),
-          });
-          if (insertError) console.error("Failed to log prompt history:", insertError);
-        }
+        // The extension will handle logging this prompt to the history via /api/history
 
         return NextResponse.json<OptimizeResponse>({
           optimized: optimizedText,
