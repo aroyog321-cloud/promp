@@ -58,7 +58,6 @@ export const useHistory = create<HistoryState>((set, get) => ({
   hydrated: false,
 
   hydrate: async () => {
-    if (get().hydrated) return;
     const localEntries = await readStorage();
     let finalEntries = [...localEntries];
     

@@ -12,7 +12,7 @@ interface Props {
   initialText: string;
   onReplace: (text: string) => void;
   onClose: () => void;
-  onOpenHistory?: () => void;
+  onOpenHistory: () => void;
 }
 
 const PLACEHOLDERS = [
@@ -174,6 +174,9 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
         source: result.source as any
       }, { accessToken: settings.accessToken, apiBaseUrl: settings.apiBaseUrl });
 
+      // Broadcast so HistoryPanel refreshes live without needing to re-open
+      window.postMessage({ type: "PROMPTLY_HISTORY_UPDATED" }, window.location.origin);
+
     } catch (err) {
       setError(err instanceof Error ? err.message : "Optimization failed");
       setIsOptimizing(false);
@@ -261,14 +264,12 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
         </div>
         
         <div style={{ display: "flex", gap: 4 }}>
-          {onOpenHistory && (
-            <button className="promptly-btn-icon" onClick={onOpenHistory} title="History (Cmd+H)">
+          <button className="promptly-btn-icon" onClick={onOpenHistory} title="History (Cmd+H)">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="10" />
                 <polyline points="12 6 12 12 16 14" />
               </svg>
-            </button>
-          )}
+          </button>
           <button className="promptly-btn-icon close" onClick={onClose} aria-label="Close">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M18 6L6 18M6 6l12 12" />
@@ -337,15 +338,6 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
                 style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', padding: '4px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
               >
                 Retry
-              </button>
-              <button 
-                onClick={() => {
-                  setSettings({ ...settings, apiBaseUrl: "http://localhost:3000" });
-                  setError("Switched to Local Fallback. Try again.");
-                }}
-                style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', padding: '4px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
-              >
-                Use Local Fallback
               </button>
             </div>
           </div>

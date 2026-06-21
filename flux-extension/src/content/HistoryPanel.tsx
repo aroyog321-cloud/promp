@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useHistory, HistoryEntry, formatRelative } from "../lib/history";
 
 interface HistoryPanelProps {
@@ -11,12 +11,25 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({ open, onClose, onSel
   const { entries, hydrated, hydrate, clear, toggleStar } = useHistory();
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<"history" | "library">("history");
+  const [confirming, setConfirming] = useState(false);
 
+  // Always re-fetch when panel opens, and subscribe to live PROMPTLY_HISTORY_UPDATED messages
   useEffect(() => {
     if (open) hydrate();
   }, [open, hydrate]);
 
-  if (!open) return null;
+  useEffect(() => {
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.type === "PROMPTLY_HISTORY_UPDATED") hydrate();
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, [hydrate]);
+
+  // Reset confirming when tab changes or panel closes
+  useEffect(() => {
+    setConfirming(false);
+  }, [tab, open]);
 
   const displayedEntries = useMemo(() => {
     return entries.filter(e => {
@@ -33,7 +46,7 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({ open, onClose, onSel
       { name: "Yesterday", entries: [] },
       { name: "Earlier", entries: [] }
     ];
-    
+
     if (displayedEntries.length === 0) return groups;
 
     const todayStr = new Date().toDateString();
@@ -55,19 +68,22 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({ open, onClose, onSel
     return groups;
   }, [displayedEntries]);
 
+  // Early return AFTER all hooks
+  if (!open) return null;
+
   return (
     <div className="promptly-history">
       <div className="promptly-history-header" style={{ paddingBottom: 0 }}>
         <div style={{ display: "flex", gap: 16 }}>
-          <button 
-            className={`promptly-tab ${tab === "history" ? "active" : ""}`} 
+          <button
+            className={`promptly-tab ${tab === "history" ? "active" : ""}`}
             onClick={() => setTab("history")}
             style={{ background: "none", border: "none", color: tab === "history" ? "var(--fg)" : "var(--fg-muted)", fontSize: 13, fontWeight: 600, paddingBottom: 8, borderBottom: tab === "history" ? "2px solid var(--primary)" : "2px solid transparent", cursor: "pointer" }}
           >
             History
           </button>
-          <button 
-            className={`promptly-tab ${tab === "library" ? "active" : ""}`} 
+          <button
+            className={`promptly-tab ${tab === "library" ? "active" : ""}`}
             onClick={() => setTab("library")}
             style={{ background: "none", border: "none", color: tab === "library" ? "var(--fg)" : "var(--fg-muted)", fontSize: 13, fontWeight: 600, paddingBottom: 8, borderBottom: tab === "library" ? "2px solid var(--primary)" : "2px solid transparent", cursor: "pointer" }}
           >
@@ -76,11 +92,27 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({ open, onClose, onSel
         </div>
         <div className="actions" style={{ marginBottom: 8 }}>
           {entries.length > 0 && tab === "history" && (
-            <button className="promptly-btn-icon" onClick={clear} title="Clear all" style={{ color: "var(--accent-error)" }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path>
-              </svg>
-            </button>
+            confirming ? (
+              <button
+                className="promptly-btn-icon"
+                onClick={() => { clear(); setConfirming(false); }}
+                title="Click again to confirm"
+                style={{ color: "var(--accent-error)", fontSize: 11, fontWeight: 700, padding: "2px 6px" }}
+              >
+                Confirm?
+              </button>
+            ) : (
+              <button
+                className="promptly-btn-icon"
+                onClick={() => setConfirming(true)}
+                title="Clear all"
+                style={{ color: "var(--accent-error)" }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path>
+                </svg>
+              </button>
+            )
           )}
           <button className="promptly-btn-icon close" onClick={onClose} aria-label="Close">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -99,15 +131,15 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({ open, onClose, onSel
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
               </svg>
             </div>
-            <input 
-              type="text" 
+            <input
+              type="text"
               placeholder={`Search ${tab}...`}
-              value={search} 
-              onChange={e => setSearch(e.target.value)} 
-              autoFocus 
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              autoFocus
             />
           </div>
-          
+
           <div className="promptly-history-list">
             {displayedEntries.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-quaternary)', fontSize: '11px' }}>
@@ -115,21 +147,18 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({ open, onClose, onSel
               </div>
             ) : (
               groupedEntries.map((group) => {
-                const groupName = group.name;
-                const groupEntries = group.entries;
-
-                if (groupEntries.length === 0) return null;
-
+                if (group.entries.length === 0) return null;
                 return (
-                  <div key={groupName} className="promptly-history-group">
-                    <div className="promptly-history-group-title">{groupName}</div>
-                    {groupEntries.map((entry, i) => (
-                      <div 
-                        key={entry.id} 
-                        className="promptly-history-item" 
+                  <div key={group.name} className="promptly-history-group">
+                    <div className="promptly-history-group-title">{group.name}</div>
+                    {group.entries.map((entry, i) => (
+                      <div
+                        key={entry.id}
+                        className="promptly-history-item"
                         style={{ "--i": i, cursor: "pointer" } as any}
+                        onClick={() => { onSelect(entry); onClose(); }}
                       >
-                        <div className="row" onClick={() => { onSelect(entry); onClose(); }}>
+                        <div className="row">
                           <span className="mode-badge">{entry.mode}</span>
                           <div className="promptly-mini-bars">
                             {[1,2,3,4].map(b => (
@@ -138,13 +167,13 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({ open, onClose, onSel
                           </div>
                           <span className="time">{formatRelative(entry.ts)}</span>
                         </div>
-                        <div className="preview" onClick={() => { onSelect(entry); onClose(); }}>
+                        <div className="preview">
                           {entry.optimized || entry.text}
                         </div>
                         <div className="row" style={{ marginTop: 8, justifyContent: "space-between" }}>
                           <div className="src">Via {entry.source === 'api' ? 'Promptly API' : 'Local Fallback'}</div>
-                          <button 
-                            className="promptly-btn-icon" 
+                          <button
+                            className="promptly-btn-icon"
                             onClick={(e) => { e.stopPropagation(); toggleStar(entry.id); }}
                             title={entry.isStarred ? "Remove from Library" : "Add to Library"}
                           >
