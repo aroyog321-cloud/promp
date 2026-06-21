@@ -35,7 +35,7 @@ export default function DashboardPage() {
   
   const [contextsCount, setContextsCount] = useState(0)
   const [recentPrompts, setRecentPrompts] = useState<any[]>([])
-  const [user, setUser] = useState<any>(null)
+
 
   const supabase = createClient()
 
