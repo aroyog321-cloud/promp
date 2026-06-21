@@ -82,11 +82,14 @@ export async function POST(request: Request) {
       responseTime: body.responseTime || null
     }).select('id').single();
 
-    if (insertError) throw insertError;
+    if (insertError) {
+      console.error("Supabase Insert Error:", insertError);
+      return NextResponse.json({ error: "Supabase Insert Error", details: insertError }, { status: 500 });
+    }
 
     return NextResponse.json({ success: true, id: data.id });
   } catch (error) {
     console.error("POST /api/history error:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: "Internal Server Error", details: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 }

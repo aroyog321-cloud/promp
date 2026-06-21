@@ -136,6 +136,9 @@ export const useHistory = create<HistoryState>((set, get) => ({
               set({ entries: updated });
               await writeStorage(updated);
             }
+          } else {
+            const errData = await res.json().catch(() => ({ status: res.status }));
+            console.error("Server rejected history sync:", errData);
           }
         }
       } catch (e) {
