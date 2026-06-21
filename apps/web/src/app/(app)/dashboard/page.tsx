@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '../../../lib/supabaseBrowser'
-import { AuthSyncComponent } from '../../../components/AuthSyncComponent'
+
 import { BarChart2, Cpu, ArrowRight, MoreVertical, Globe, MessageSquare, Bot } from 'lucide-react'
 
 const DashboardSkeleton = () => (
@@ -191,7 +191,7 @@ export default function DashboardPage() {
         </header>
 
         <div className="mb-8">
-          <AuthSyncComponent accessToken={token || ''} />
+
         </div>
 
         {/* Top Cards */}

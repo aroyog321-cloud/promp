@@ -17,6 +17,8 @@ export const metadata: Metadata = {
   description: "The intelligent prompt engineering overlay for Chrome.",
 };
 
+import { GlobalAuthSync } from "../components/GlobalAuthSync";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -29,6 +31,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col font-sans bg-[#09090b] text-white selection:bg-blue-500/30">
         {children}
+        <GlobalAuthSync />
       </body>
     </html>
   );

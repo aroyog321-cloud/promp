@@ -68,6 +68,7 @@ CREATE TABLE "PromptHistory" (
     "rewriteLevel" "RewriteLevel",
     "tokensUsed" INTEGER,
     "responseTime" DOUBLE PRECISION,
+    "isStarred" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "PromptHistory_pkey" PRIMARY KEY ("id")

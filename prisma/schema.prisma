@@ -102,6 +102,7 @@ model PromptHistory {
   rewriteLevel  RewriteLevel?
   tokensUsed    Int?
   responseTime  Float?   // in seconds
+  isStarred     Boolean  @default(false)
   createdAt     DateTime @default(now())
 
   @@index([userId])

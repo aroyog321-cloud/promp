@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '../../../lib/supabaseBrowser'
-import { AuthSyncComponent } from '../../../components/AuthSyncComponent'
+
 import { User, Download, Shield, LogOut } from 'lucide-react'
 
 const SettingsSkeleton = () => (
@@ -94,7 +94,7 @@ export default function SettingsPage() {
             </div>
             
             <div className="-mt-2 mb-2">
-              <AuthSyncComponent accessToken={token || ''} />
+
             </div>
             <p className="text-xs text-zinc-500 mt-4 leading-relaxed">
               When synced, your extension will automatically fetch your active Context Profiles and securely send optimization requests to your account.
