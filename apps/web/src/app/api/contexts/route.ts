@@ -16,8 +16,9 @@ export async function POST(request: Request) {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) {
-      if (supabaseUrl.includes('placeholder')) {
-        console.warn("Using placeholder Supabase URL. Bypassing auth for development.");
+      // FIX 2.2: Never bypass auth in production.
+      if (process.env.NODE_ENV !== 'production' && supabaseUrl.includes('placeholder')) {
+        console.warn("[DEV ONLY] Using placeholder Supabase URL. Bypassing auth for local development.");
       } else {
         return NextResponse.json({ error: "Invalid Access Token." }, { status: 401 });
       }
@@ -96,7 +97,8 @@ export async function GET(request: Request) {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) {
-      if (supabaseUrl.includes('placeholder')) {
+      // FIX 2.2: Never bypass auth in production.
+      if (process.env.NODE_ENV !== 'production' && supabaseUrl.includes('placeholder')) {
         return NextResponse.json([]);
       } else {
         return NextResponse.json({ error: "Invalid Access Token." }, { status: 401 });

@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { createClient } from '../../../lib/supabaseBrowser'
 
-import { User, Download, Shield, LogOut } from 'lucide-react'
+import { User, Shield, LogOut, CheckCircle2, Clock, RefreshCw } from 'lucide-react'
 
 const SettingsSkeleton = () => (
   <main className="min-h-[calc(100vh-73px)] pb-32 bg-[#09090b] text-white">
@@ -22,8 +22,23 @@ export default function SettingsPage() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [token, setToken] = useState<string | null>(null)
-  
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'connected' | 'no_extension'>('idle')
+  const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const supabase = createClient()
+
+  // Post the auth token to the extension via postMessage.
+  // authSync.ts (content script) listens for PROMPTLY_AUTH_TOKEN and saves
+  // it to chrome.storage.local, then replies with PROMPTLY_AUTH_SYNCED.
+  const syncTokenToExtension = (accessToken: string) => {
+    setSyncStatus('syncing')
+    window.postMessage({ type: 'PROMPTLY_AUTH_TOKEN', token: accessToken }, window.location.origin)
+
+    // Give the extension 3 seconds to acknowledge
+    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current)
+    syncTimeoutRef.current = setTimeout(() => {
+      setSyncStatus(prev => prev === 'syncing' ? 'no_extension' : prev)
+    }, 3000)
+  }
 
   useEffect(() => {
     async function loadData() {
@@ -32,6 +47,8 @@ export default function SettingsPage() {
         if (session?.user) {
           setUser(session.user)
           setToken(session.access_token)
+          // Auto-sync token to extension on page load
+          syncTokenToExtension(session.access_token)
         } else {
           window.location.href = '/login'
         }
@@ -42,6 +59,21 @@ export default function SettingsPage() {
       }
     }
     loadData()
+
+    // Listen for extension acknowledgement
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return
+      if (event.data?.type === 'PROMPTLY_AUTH_SYNCED') {
+        if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current)
+        setSyncStatus('connected')
+      }
+    }
+    window.addEventListener('message', onMessage)
+    return () => {
+      window.removeEventListener('message', onMessage)
+      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleSignOut = async () => {
@@ -94,7 +126,34 @@ export default function SettingsPage() {
             </div>
             
             <div className="-mt-2 mb-2">
-
+              {/* Extension Sync Status Badge */}
+              <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-medium ${
+                syncStatus === 'connected'
+                  ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                  : syncStatus === 'no_extension'
+                  ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+                  : 'bg-white/[0.03] border-white/[0.06] text-zinc-400'
+              }`}>
+                {syncStatus === 'connected' && <CheckCircle2 size={16} className="shrink-0" />}
+                {syncStatus === 'syncing'   && <Clock size={16} className="shrink-0 animate-pulse" />}
+                {syncStatus === 'no_extension' && <Clock size={16} className="shrink-0" />}
+                {syncStatus === 'idle'      && <Clock size={16} className="shrink-0" />}
+                <span>
+                  {syncStatus === 'connected'    && 'Extension connected — token synced successfully.'}
+                  {syncStatus === 'syncing'       && 'Syncing token to extension…'}
+                  {syncStatus === 'no_extension'  && 'Extension not detected. Make sure Proenpt is installed and this tab is open.'}
+                  {syncStatus === 'idle'          && 'Waiting to sync…'}
+                </span>
+                {token && syncStatus !== 'syncing' && (
+                  <button
+                    onClick={() => syncTokenToExtension(token)}
+                    className="ml-auto flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+                  >
+                    <RefreshCw size={11} />
+                    Resync
+                  </button>
+                )}
+              </div>
             </div>
             <p className="text-xs text-zinc-500 mt-4 leading-relaxed">
               When synced, your extension will automatically fetch your active Context Profiles and securely send optimization requests to your account.

@@ -58,27 +58,16 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
 
   const stateClass = promptState === "vague" ? "pulse-vague" : promptState === "ready" ? "glow-ready" : "";
   
-  let imageUrl = "";
+  // FIX 4.15: Don't unmount the entire button when the orb image can't be loaded.
+  // If the extension context is invalidated, show a text fallback so the user
+  // can still click to open the panel.
+  let imageContent: React.ReactNode;
   try {
-    imageUrl = chrome.runtime.getURL("public/promptly-orb.png");
-  } catch (e) {
-    // Extension context invalidated — fail gracefully and unmount
-    return null;
-  }
-
-  return (
-    <button
-      type="button"
-      aria-label="Optimize prompt with Promptly"
-      title="Single-click to open panel | Double-click to Auto-Optimize"
-      onClick={handleClicks}
-      onMouseDown={(e) => e.preventDefault()}
-      className={`promptly-orb ${compact ? 'compact' : ''} ${loading ? "promptly-loading" : ""} ${active ? "promptly-orb-active" : ""} ${!active && stateClass ? stateClass : ""}`}
-    >
-      <div className="promptly-loading-ring active" />
+    const imageUrl = chrome.runtime.getURL("public/promptly-orb.png");
+    imageContent = (
       <img
         src={imageUrl}
-        alt="Promptly Orb"
+        alt="Proenpt Orb"
         style={{
           width: "100%",
           height: "100%",
@@ -90,6 +79,25 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
           pointerEvents: "none"
         }}
       />
+    );
+  } catch (e) {
+    // Extension context invalidated — show text fallback instead of unmounting.
+    imageContent = (
+      <span style={{ fontSize: 16, lineHeight: 1, pointerEvents: "none", zIndex: 2 }}>✦</span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      aria-label="Optimize prompt with Proenpt"
+      title="Single-click to open panel | Double-click to Auto-Optimize"
+      onClick={handleClicks}
+      onMouseDown={(e) => e.preventDefault()}
+      className={`promptly-orb ${compact ? 'compact' : ''} ${loading ? "promptly-loading" : ""} ${active ? "promptly-orb-active" : ""} ${!active && stateClass ? stateClass : ""}`}
+    >
+      <div className="promptly-loading-ring active" />
+      {imageContent}
       {showSuccessRing && <div className="promptly-success-ring" />}
     </button>
   );

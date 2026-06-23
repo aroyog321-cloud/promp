@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '../../../lib/supabaseBrowser'
 
-import { BarChart2, Cpu, ArrowRight, MoreVertical, Globe, MessageSquare, Bot } from 'lucide-react'
+import { BarChart2, Cpu, ArrowRight, Globe, MessageSquare, Bot, Star, Trash2, Copy } from 'lucide-react'
 
 const Shimmer = () => (
   <motion.div
@@ -44,7 +44,9 @@ export default function DashboardPage() {
   
   const [contextsCount, setContextsCount] = useState(0)
   const [recentPrompts, setRecentPrompts] = useState<any[]>([])
-
+  const [activeMenu, setActiveMenu] = useState<string | null>(null)
+  const [copied, setCopied] = useState<string | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const supabase = createClient()
 
@@ -125,6 +127,35 @@ export default function DashboardPage() {
     }
     loadData()
   }, [])
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!activeMenu) return
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setActiveMenu(null)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [activeMenu])
+
+  const handleStar = async (id: string, current: boolean) => {
+    setRecentPrompts(prev => prev.map(p => p.id === id ? { ...p, isStarred: !current } : p))
+    await supabase.from('PromptHistory').update({ isStarred: !current }).eq('id', id)
+    setActiveMenu(null)
+  }
+
+  const handleDelete = async (id: string) => {
+    setRecentPrompts(prev => prev.filter(p => p.id !== id))
+    await supabase.from('PromptHistory').delete().eq('id', id)
+    setActiveMenu(null)
+  }
+
+  const handleCopy = (text: string, label: string) => {
+    navigator.clipboard.writeText(text)
+    setCopied(label)
+    setTimeout(() => setCopied(null), 1800)
+    setActiveMenu(null)
+  }
 
   useEffect(() => {
     if (!user) return
@@ -260,12 +291,24 @@ export default function DashboardPage() {
         <div className="bg-[#1a1a1c] border border-white/[0.04] rounded-2xl overflow-hidden mb-8">
           <div className="flex items-center justify-between px-6 py-5 border-b border-white/[0.04]">
             <h2 className="text-lg font-semibold text-white tracking-tight">Recent Optimizations</h2>
-            <Link href="/dashboard" className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
+            <Link href="/history" className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
               View All <ArrowRight size={12} />
             </Link>
           </div>
           
-          <div className="flex flex-col">
+          <div className="flex flex-col" ref={menuRef}>
+            {/* Copy toast */}
+            <AnimatePresence>
+              {copied && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-zinc-800 border border-white/10 text-white text-xs font-medium px-4 py-2 rounded-full shadow-xl"
+                >
+                  ✓ {copied} copied
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {recentPrompts.length === 0 ? (
               <motion.div 
                 initial={{ opacity: 0, y: 10 }}
@@ -326,9 +369,47 @@ export default function DashboardPage() {
                     <p className="text-[10px] text-zinc-500 uppercase tracking-wider mt-0.5">Latency</p>
                   </div>
                   
-                  <button className="text-zinc-600 hover:text-promptly-cyan transition-colors p-1">
-                    <MoreVertical size={18} />
-                  </button>
+                  {/* Three-dot menu */}
+                  <div className="relative">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === prompt.id ? null : prompt.id) }}
+                      className="text-zinc-600 hover:text-promptly-cyan transition-colors p-1 rounded-lg hover:bg-white/[0.05]"
+                      aria-label="More options"
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
+                      </svg>
+                    </button>
+
+                    <AnimatePresence>
+                      {activeMenu === prompt.id && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                          transition={{ duration: 0.12 }}
+                          className="absolute right-0 top-9 z-50 w-52 bg-[#1e1e20] border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <button onClick={() => handleCopy(prompt.originalPrompt || '', 'Original')} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-300 hover:bg-white/[0.05] hover:text-white transition-colors text-left">
+                            <Copy size={13} className="text-zinc-500" /> Copy original
+                          </button>
+                          <button onClick={() => handleCopy(prompt.optimizedPrompt || '', 'Optimized')} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-300 hover:bg-white/[0.05] hover:text-white transition-colors text-left">
+                            <Copy size={13} className="text-zinc-500" /> Copy optimized
+                          </button>
+                          <div className="h-px bg-white/[0.05] mx-2" />
+                          <button onClick={() => handleStar(prompt.id, prompt.isStarred)} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-300 hover:bg-white/[0.05] hover:text-white transition-colors text-left">
+                            <Star size={13} className={prompt.isStarred ? 'text-amber-400 fill-amber-400' : 'text-zinc-500'} />
+                            {prompt.isStarred ? 'Unstar' : 'Star & save'}
+                          </button>
+                          <div className="h-px bg-white/[0.05] mx-2" />
+                          <button onClick={() => handleDelete(prompt.id)} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors text-left">
+                            <Trash2 size={13} /> Delete
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
               </motion.div>
               ))

@@ -32,7 +32,7 @@
     "https://chat.deepseek.com/*",
     "http://localhost:3000/*",
     "http://127.0.0.1:3000/*",
-    "https://*.vercel.app/*",
+    "https://proenpt.vercel.app/*",
     "https://*.proenpt.com/*"
   ],
   "content_scripts": [
@@ -54,7 +54,7 @@
       "matches": [
         "http://localhost:3000/*",
         "http://127.0.0.1:3000/*",
-        "https://*.vercel.app/*",
+        "https://proenpt.vercel.app/*",
         "https://*.proenpt.com/*",
         "https://proenpt.com/*"
       ],

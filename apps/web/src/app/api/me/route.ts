@@ -16,11 +16,12 @@ export async function GET(request: Request) {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) {
-      if (supabaseUrl.includes('placeholder')) {
-        console.warn("Using placeholder Supabase URL. Bypassing auth for development.");
+      // FIX 2.2: Never bypass auth in production.
+      if (process.env.NODE_ENV !== 'production' && supabaseUrl.includes('placeholder')) {
+        console.warn("[DEV ONLY] Using placeholder Supabase URL. Bypassing auth for local development.");
         return NextResponse.json({
-          tier: 'expert',
-          total_requests_today: 42,
+          tier: 'free',
+          total_requests_today: 0,
           contextProfile: null
         });
       } else {

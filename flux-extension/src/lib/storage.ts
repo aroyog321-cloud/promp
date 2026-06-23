@@ -33,8 +33,8 @@ export async function setSettings(partial: Partial<PromptlySettings>): Promise<P
   return next;
 }
 
-export function onSettingsChanged(callback: (settings: PromptlySettings) => void) {
-  chrome.storage.onChanged.addListener((changes, area) => {
+export function onSettingsChanged(callback: (settings: PromptlySettings) => void): () => void {
+  const listener = (changes: { [key: string]: chrome.storage.StorageChange }, area: string) => {
     if (area === "local" && changes[STORAGE_KEY]) {
       const newValue = changes[STORAGE_KEY].newValue;
       callback({
@@ -43,5 +43,9 @@ export function onSettingsChanged(callback: (settings: PromptlySettings) => void
         contextProfile: { ...DEFAULT_SETTINGS.contextProfile, ...(newValue?.contextProfile ?? {}) }
       });
     }
-  });
+  };
+  chrome.storage.onChanged.addListener(listener);
+  // Return cleanup so callers (e.g. React useEffect) can remove the listener on unmount.
+  // Previously this returned void, causing listeners to stack up indefinitely.
+  return () => chrome.storage.onChanged.removeListener(listener);
 }

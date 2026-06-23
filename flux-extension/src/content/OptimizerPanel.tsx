@@ -205,17 +205,21 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
       if (fillingVariables) {
         Object.entries(variableValues).forEach(([key, value]) => {
           if (value.trim()) {
-            finalOutput = finalOutput.replace(new RegExp(`{{${key}}}`, 'g'), value);
+            // FIX 3.28: Escape regex special characters in variable key names.
+            // Without this, a key like "name.price" would produce a broken RegExp.
+            const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            finalOutput = finalOutput.replace(new RegExp(`{{${escapedKey}}}`, 'g'), value);
           }
         });
       }
 
       setToast("Inserted ✓");
+      // FIX 3.13: Only call onReplace once, inside the timeout after the toast.
+      // The original code called it both immediately AND after 1s, inserting text twice.
       setTimeout(() => {
         onReplace(finalOutput);
         onClose();
       }, 1000);
-      onReplace(finalOutput);
     }
   };
 
@@ -260,7 +264,7 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
             <span className="dot on" />
             <span>Online</span>
           </div>
-          <span className="promptly-wordmark">Promptly</span>
+          <span className="promptly-wordmark">Proenpt</span>
         </div>
         
         <div style={{ display: "flex", gap: 4 }}>

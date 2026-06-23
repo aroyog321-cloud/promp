@@ -28,6 +28,14 @@ function lcsKept(a: string[], b: string[]): { aKept: Set<number>; bKept: Set<num
   const m = b.length;
   if (n === 0 || m === 0) return { aKept: new Set(), bKept: new Set() };
 
+  // FIX 3.25: Guard against OOM for very long prompts.
+  // A 50K-token prompt would allocate ~10 GB. Fall back to an empty kept-set
+  // (show everything as changed) rather than crashing the tab.
+  if (n * m > 1e8) {
+    console.warn("[Promptly] Diff skipped: prompt too long for word-level LCS. Showing full diff.");
+    return { aKept: new Set(), bKept: new Set() };
+  }
+
   // Build LCS length table (rows = a+1, cols = b+1).
   // Use a typed array for speed; values are small integers.
   const dp: Uint32Array = new Uint32Array((n + 1) * (m + 1));

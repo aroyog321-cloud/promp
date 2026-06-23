@@ -171,7 +171,7 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({ open, onClose, onSel
                           {entry.optimized || entry.text}
                         </div>
                         <div className="row" style={{ marginTop: 8, justifyContent: "space-between" }}>
-                          <div className="src">Via {entry.source === 'api' ? 'Promptly API' : 'Local Fallback'}</div>
+                          <div className="src">Via {entry.source === 'api' ? 'Proenpt API' : 'Local Fallback'}</div>
                           <button
                             className="promptly-btn-icon"
                             onClick={(e) => { e.stopPropagation(); toggleStar(entry.id); }}

@@ -26,7 +26,7 @@ export const Popup: React.FC = () => {
             const planData = { tier: data.tier, total_requests_today: data.total_requests_today };
             setApiPlanData(planData);
             chrome.storage.local.set({ 
-              apiPlanCache: { data: planData, expiresAt: now + 10 * 1000 } 
+              apiPlanCache: { data: planData, expiresAt: now + 5 * 60 * 1000 } 
             });
             if (data.contextProfile) {
               const currentCtx = s.contextProfile || {};

@@ -28,7 +28,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
     if (this.state.hasError) {
       return (
         <div style={{ padding: 12, background: "var(--accent-error, #f44336)", color: "white", borderRadius: 8, fontSize: 13, display: "flex", flexDirection: "column", gap: 8, pointerEvents: "auto" }}>
-          <div>Promptly encountered an error.</div>
+          <div>Proenpt encountered an error.</div>
           <button onClick={() => this.setState({ hasError: false })} style={{ background: "white", color: "#f44336", border: "none", padding: "4px 8px", borderRadius: 4, cursor: "pointer", alignSelf: "flex-start" }}>Retry</button>
         </div>
       );
@@ -44,7 +44,7 @@ function bootstrap(platform: PlatformConfig) {
   // "Extension context invalidated" and crashes the content script.
   // We bail out early so the page itself is unaffected.
   if (!chrome.runtime?.id) {
-    console.warn("[Promptly] Extension context invalidated. Refresh the tab to re-enable Promptly.");
+    console.warn("[Proenpt] Extension context invalidated. Refresh the tab to re-enable Proenpt.");
     return;
   }
 
@@ -268,8 +268,10 @@ const PromptlyApp: React.FC<{ platform: PlatformConfig }> = ({ platform }) => {
     setOrbLoading(true);
 
     try {
-      // Respect medium/aggressive/expert. If light or undefined, boost to aggressive.
-      const level = (!settings.defaultLevel || settings.defaultLevel === "light") ? "aggressive" : settings.defaultLevel;
+      // FIX 3.16: Respect the user's chosen level. Previously "light" was silently
+      // upgraded to "aggressive", which contradicts the UI and charges higher quota.
+      // Only fall back if no level is set at all.
+      const level = settings.defaultLevel || "medium";
 
       if (!isRegenerating && settings.defaultMode === "auto") {
         showToast("Auto-detecting mode...", "info");
@@ -389,7 +391,7 @@ const PromptlyApp: React.FC<{ platform: PlatformConfig }> = ({ platform }) => {
         />
         {showOnboarding && (
           <div className="promptly-onboarding-tooltip">
-            <strong>Welcome to Promptly!</strong>
+            <strong>Welcome to Proenpt!</strong>
             <p>Click once to refine, double-click to auto-optimize, Ctrl+Shift+P to open, Alt+Shift+Y to auto-optimize.</p>
             <button onClick={() => setShowOnboarding(false)}>Got it</button>
           </div>
@@ -459,6 +461,8 @@ const DraggableOrb: React.FC<{
         setTimeout(() => setIsDragging(false), 50);
       }
       dragStart.current = null;
+      // FIX 3.9: Reset hasMoved so the next click (after drag ends) is not swallowed.
+      hasMoved.current = false;
     };
 
     window.addEventListener("pointermove", handlePointerMove);
@@ -472,6 +476,7 @@ const DraggableOrb: React.FC<{
   const handlePointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     dragStart.current = { x: e.clientX, y: e.clientY };
+    // FIX 3.9: Reset hasMoved so clicks work again after a prior drag.
     hasMoved.current = false;
   };
 
@@ -484,6 +489,7 @@ const DraggableOrb: React.FC<{
         pointerEvents: "auto",
         zIndex: 2147483647
       }}
+      draggable={false}
       onPointerDown={handlePointerDown}
       onClickCapture={(e) => {
         if (hasMoved.current) {

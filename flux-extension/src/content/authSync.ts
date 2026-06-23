@@ -48,8 +48,6 @@ window.addEventListener("message", (event) => {
   ];
   const ok = allowed.includes(event.origin);
   if (!ok) return;
-  // This helps when Next.js wraps the dev experience in an iframe, allowing the ping to flow through
-  // Removing event.source !== window restriction for robust cross-frame communication within the same origin
 
   const data = event.data;
   if (!data) return;
@@ -57,6 +55,13 @@ window.addEventListener("message", (event) => {
   if (data.type === "PROMPTLY_AUTH_PING") {
     announce();
   } else if (data.type === "PROMPTLY_AUTH_TOKEN" && data.token) {
+    // FIX 2.5: Token handoffs MUST come from the top-level window, not from any
+    // iframe embedded under our origin. An attacker-controlled iframe on our domain
+    // (e.g. a compromised marketing page) could otherwise inject an arbitrary token.
+    if (event.source !== window) {
+      console.warn("[Promptly] Ignored PROMPTLY_AUTH_TOKEN from non-window source (possible iframe injection).");
+      return;
+    }
     saveToken(data.token, window.location.origin);
   } else if (data.type === "PROMPTLY_LOGOUT") {
     chrome.storage.local.get(STORAGE_KEY, (res) => {

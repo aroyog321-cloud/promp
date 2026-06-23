@@ -50,7 +50,8 @@
       "Bash(npm init *)",
       "Bash(gh pr *)",
       "Bash(grep -E \"\\\\.\\(tsx|ts|js|jsx\\)$\")",
-      "Bash(xxd)"
+      "Bash(xxd)",
+      "Bash(grep -rEn \"eyJ[A-Za-z0-9]{20,}\" D:/flux-extension)"
     ]
   }
 }

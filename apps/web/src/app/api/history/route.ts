@@ -25,7 +25,8 @@ export async function GET(request: Request) {
 
     const user = await getUser(token);
     if (!user) {
-      if (supabaseUrl.includes('placeholder')) return NextResponse.json([]);
+      // FIX 2.2: Never bypass auth in production.
+      if (process.env.NODE_ENV !== 'production' && supabaseUrl.includes('placeholder')) return NextResponse.json([]);
       return NextResponse.json({ error: "Invalid Access Token." }, { status: 401 });
     }
 
@@ -59,7 +60,8 @@ export async function POST(request: Request) {
 
     const user = await getUser(token);
     if (!user) {
-      if (supabaseUrl.includes('placeholder')) return NextResponse.json({ success: true, message: "Mocked locally" });
+      // FIX 2.2: Never bypass auth in production.
+      if (process.env.NODE_ENV !== 'production' && supabaseUrl.includes('placeholder')) return NextResponse.json({ success: true, message: "Mocked locally" });
       return NextResponse.json({ error: "Invalid Access Token." }, { status: 401 });
     }
 
@@ -119,6 +121,41 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("POST /api/history error:", error);
     return NextResponse.json({ error: "Internal Server Error", details: error instanceof Error ? error.message : String(error) }, { status: 500 });
+  }
+}
+
+// DELETE — remove a single history entry
+export async function DELETE(request: Request) {
+  try {
+    const token = getAuthToken(request);
+    if (!token) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+
+    const user = await getUser(token);
+    if (!user) return NextResponse.json({ error: 'Invalid Access Token.' }, { status: 401 });
+
+    const url = new URL(request.url);
+    const id = url.searchParams.get('id');
+    if (!id) return NextResponse.json({ error: 'Missing id query param.' }, { status: 400 });
+
+    const supabaseUserClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: `Bearer ${token}` } }
+    });
+
+    const { error: deleteError } = await supabaseUserClient
+      .from('PromptHistory')
+      .delete()
+      .eq('id', id)
+      .eq('userId', user.id);
+
+    if (deleteError) {
+      console.error('Delete error:', deleteError);
+      return NextResponse.json({ error: 'Delete failed', details: deleteError }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('DELETE /api/history error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
 

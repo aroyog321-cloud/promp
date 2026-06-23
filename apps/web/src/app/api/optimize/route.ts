@@ -144,6 +144,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
+    // Input length validation — prevents prompt injection & runaway Gemini bills
+    if (body.text.length > 8000) {
+      return NextResponse.json({ error: "Prompt too long. Maximum 8,000 characters." }, { status: 400 });
+    }
+    if (body.refinement && body.refinement.length > 1000) {
+      return NextResponse.json({ error: "Refinement instruction too long. Maximum 1,000 characters." }, { status: 400 });
+    }
+    if (body.context) {
+      for (const [field, value] of Object.entries(body.context)) {
+        if (typeof value === 'string' && value.length > 500) {
+          return NextResponse.json({ error: `Context field '${field}' too long. Maximum 500 characters.` }, { status: 400 });
+        }
+      }
+      // Validate websiteUrl to prevent injection via URL field
+      if (body.context.websiteUrl) {
+        try { new URL(body.context.websiteUrl); } catch {
+          body.context.websiteUrl = '';
+        }
+      }
+    }
+
     const authHeader = request.headers.get('authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json({ error: "Unauthorized. Missing or invalid Promptly Access Token." }, { status: 401 });
@@ -152,11 +173,12 @@ export async function POST(request: Request) {
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) {
-      // Allow fallback if we are in local development without Supabase configured
-      if (supabaseUrl.includes('placeholder')) {
-        console.warn("Using placeholder Supabase URL. Bypassing auth for development.");
+      // FIX 2.2: Never bypass auth in production. The old 'placeholder' check
+      // meant a deploy without NEXT_PUBLIC_SUPABASE_URL set got free expert access.
+      if (process.env.NODE_ENV !== 'production' && supabaseUrl.includes('placeholder')) {
+        console.warn("[DEV ONLY] Using placeholder Supabase URL. Bypassing auth for local development.");
       } else {
-        return NextResponse.json({ error: "Invalid Access Token. Please log in again at promptly.com." }, { status: 401 });
+        return NextResponse.json({ error: "Invalid Access Token. Please log in again at proenpt.com." }, { status: 401 });
       }
     }
 
@@ -164,47 +186,49 @@ export async function POST(request: Request) {
       global: { headers: { Authorization: `Bearer ${token}` } }
     });
 
-    const supabaseAdmin = supabaseServiceKey ? createClient(supabaseUrl, supabaseServiceKey) : supabaseUserClient;
+    // --- Quota check & atomic increment via DB RPC ---
+    // The RPC handles: row creation, daily counter reset, limit enforcement,
+    // and atomic increment — all in a single FOR UPDATE transaction.
+    const isTwoPass = body.level === "aggressive" || body.level === "expert";
+    const isRegeneration = !!body.refinement || !!body.previousPrompt;
+    const hasContextMemory = !!body.context && Object.values(body.context).some(v => !!v);
 
     let tier = 'free';
-    if (user && !supabaseUrl.includes('placeholder')) {
-      // Mock tracking schema implementation
-      const { data: profile } = await supabaseUserClient.from('usage_stats').select('*').eq('id', user.id).single();
-      tier = profile?.tier || 'free';
-      const totalRequestsToday = profile?.total_requests_today || 0;
-      const aggressiveExpertToday = profile?.aggressive_expert_today || 0;
-      const regenerationsToday = profile?.regenerations_today || 0;
-      
-      const isRegeneration = !!body.refinement || !!body.previousPrompt;
-      const hasContextMemory = !!body.context && Object.values(body.context).some(v => !!v);
 
-      if (tier === 'free') {
-        if (totalRequestsToday >= 10) {
-          return NextResponse.json({ error: "Free tier daily limit reached (10/10). Upgrade to Pro for more." }, { status: 403 });
-        }
-        if ((body.level === 'aggressive' || body.level === 'expert') && aggressiveExpertToday >= 2) {
-          return NextResponse.json({ error: "Free tier Aggressive/Expert limit reached (2/2). Upgrade to Pro." }, { status: 403 });
-        }
-        if (isRegeneration && regenerationsToday >= 4) {
-          return NextResponse.json({ error: "Free tier regeneration limit reached (4/4). Upgrade to Pro." }, { status: 403 });
-        }
-        if (hasContextMemory) {
-          return NextResponse.json({ error: "Context Memory is locked in the Free tier. Upgrade to Expert." }, { status: 403 });
-        }
-      } else if (tier === 'pro') {
-        if (totalRequestsToday >= 25) {
-          return NextResponse.json({ error: "Pro tier daily limit reached (25/25). Upgrade to Expert for unlimited." }, { status: 403 });
-        }
-        if (isRegeneration && regenerationsToday >= 2) {
-          return NextResponse.json({ error: "Pro tier regeneration limit reached (2/2). Upgrade to Expert." }, { status: 403 });
-        }
-        if (hasContextMemory) {
-          return NextResponse.json({ error: "Context Memory is locked in the Pro tier. Upgrade to Expert." }, { status: 403 });
-        }
+    if (user && !supabaseUrl.includes('placeholder')) {
+      const { data: usageResult, error: rpcError } = await supabaseUserClient
+        .rpc('increment_usage', {
+          p_user_id: user.id,
+          p_is_advanced: isTwoPass,
+          p_is_regen: isRegeneration
+        });
+
+      if (rpcError) {
+        console.error("increment_usage RPC error:", rpcError);
+        return NextResponse.json({ error: "Usage tracking error. Please try again." }, { status: 500 });
       }
-      
-      // Note: We would increment usage here in a real production system using an RPC call or edge function
-      // supabase.rpc('increment_usage', { user_id: user.id, is_advanced: body.level === 'aggressive' || body.level === 'expert' });
+
+      // RPC returns { error: 'LIMIT_TYPE' } when a quota is exceeded
+      if (usageResult?.error) {
+        const limitMessages: Record<string, string> = {
+          DAILY_LIMIT_REACHED: usageResult.tier === 'free'
+            ? "Daily limit reached (10/10). Upgrade to Pro for 50/day."
+            : "Daily limit reached (50/50). Upgrade to Expert for unlimited.",
+          ADVANCED_LIMIT_REACHED: "Aggressive/Expert limit reached for today (2/2). Upgrade to Pro.",
+          REGEN_LIMIT_REACHED: "Regeneration limit reached for today (4/4). Upgrade to Pro.",
+        };
+        return NextResponse.json(
+          { error: limitMessages[usageResult.error] || "Usage limit reached." },
+          { status: 403 }
+        );
+      }
+
+      tier = usageResult?.tier || 'free';
+
+      // Context memory is gated at Pro+ only
+      if (hasContextMemory && tier === 'free') {
+        return NextResponse.json({ error: "Context Memory requires a Pro or Expert plan." }, { status: 403 });
+      }
     }
 
     if (!GEMINI_API_KEY) {
@@ -218,34 +242,22 @@ export async function POST(request: Request) {
       });
     }
 
-    const platform = request.headers.get("origin") || undefined;
+    // FIX 3.1: Sanitize the origin before passing to the LLM.
+    const rawOrigin = request.headers.get("origin") || "";
+    const ALLOWED_ORIGINS = [
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+      "https://proenpt.vercel.app",
+      "https://proenpt.com",
+      "https://app.proenpt.com",
+    ];
+    const isTrustedOrigin = rawOrigin.startsWith("chrome-extension://") || ALLOWED_ORIGINS.includes(rawOrigin);
+    const platform = isTrustedOrigin ? rawOrigin : undefined;
+
     const systemPrompt = buildSystemPrompt(body.mode, body.level, platform);
     const userPrompt = buildUserPrompt(body);
 
-    const isTwoPass = body.level === "aggressive" || body.level === "expert";
     const activeApiKey = isTwoPass ? GEMINI_API_KEY_PREMIUM : GEMINI_API_KEY;
-
-    // Increment usage manually without RPC
-    if (user && !supabaseUrl.includes('placeholder')) {
-      const { data: stats } = await supabaseUserClient
-        .from('usage_stats')
-        .select('total_requests_today, aggressive_expert_today, regenerations_today')
-        .eq('id', user.id)
-        .single();
-        
-      if (stats) {
-        const { error: usageError } = await supabaseAdmin
-          .from('usage_stats')
-          .update({
-            total_requests_today: (stats.total_requests_today || 0) + 1,
-            aggressive_expert_today: (stats.aggressive_expert_today || 0) + (isTwoPass ? 1 : 0),
-            regenerations_today: (stats.regenerations_today || 0) + ((!!body.refinement || !!body.previousPrompt) ? 1 : 0),
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', user.id);
-        if (usageError) console.error("Failed to increment usage:", usageError);
-      }
-    }
 
     if (isTwoPass) {
       // Pass 1: Draft (always non-streaming)
