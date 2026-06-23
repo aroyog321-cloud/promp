@@ -62,8 +62,14 @@ export default function SettingsPage() {
 
     // Listen for extension acknowledgement
     const onMessage = (event: MessageEvent) => {
+      if (event.data?.type && event.data.type.startsWith('PROMPTLY_')) {
+        console.log('[SettingsPage] Received message:', event.data.type, 'from origin:', event.origin);
+      }
+      
       if (event.origin !== window.location.origin) return
+      
       if (event.data?.type === 'PROMPTLY_AUTH_SYNCED') {
+        console.log('[SettingsPage] Sync confirmed! Updating UI to connected.');
         if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current)
         setSyncStatus('connected')
       }
