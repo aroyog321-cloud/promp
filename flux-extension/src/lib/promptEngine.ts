@@ -265,7 +265,10 @@ ${draftText}`;
           let errorMsg = "API responded with " + res.status;
           try {
             const errData = await res.json();
-            if (errData.error) errorMsg = errData.error;
+            if (errData.error) {
+              errorMsg = errData.error;
+              if (errData.details) errorMsg += ` (${errData.details})`;
+            }
           } catch (e) {}
           
           if (res.status === 401) {

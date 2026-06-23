@@ -101,8 +101,8 @@ async function postEntryToServer(
   auth: { accessToken: string; apiBaseUrl: string }
 ): Promise<{ serverId?: string; ok: boolean }> {
   try {
-    const endpoint = `${auth.apiBaseUrl.replace(/\/$/, "")}/api/history`;
-    const res = await fetch(endpoint, {
+    const API_BASE = auth.apiBaseUrl.replace(/\/$/, "");
+    const res = await fetch(`${API_BASE}/api/history`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -128,8 +128,6 @@ async function postEntryToServer(
   }
 }
 
-import { getSettings } from "./storage";
-
 export const useHistory = create<HistoryState>((set, get) => ({
   entries: [],
   hydrated: false,
@@ -141,8 +139,8 @@ export const useHistory = create<HistoryState>((set, get) => ({
     try {
       const settings = await getSettings();
       if (settings.apiBaseUrl && settings.accessToken) {
-        const endpoint = `${settings.apiBaseUrl.replace(/\/$/, "")}/api/history?limit=${MAX_ENTRIES}`;
-        const res = await fetch(endpoint, {
+        const API_BASE = settings.apiBaseUrl.replace(/\/$/, "");
+        const res = await fetch(`${API_BASE}/api/history?limit=${MAX_ENTRIES}`, {
           headers: { Authorization: `Bearer ${settings.accessToken}` },
         });
         if (res.ok) {
