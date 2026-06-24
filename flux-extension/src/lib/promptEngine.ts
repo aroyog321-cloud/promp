@@ -279,9 +279,10 @@ ${draftText}`;
                   chrome.tabs.sendMessage(tabs[0].id, { type: "PROMPTLY_REAUTH_REQUEST" });
                 }
               });
-              chrome.storage.local.remove('apiPlanCache');
+              try { chrome.storage.local.remove('apiPlanCache'); } catch(e){}
             }
           }
+          
           throw new Error(errorMsg);
         }
         
@@ -334,8 +335,13 @@ ${draftText}`;
       if (e instanceof Error && (e.message.includes("401") || e.message.includes("403"))) {
         throw e; // Do not fallback to local if unauthorized
       }
-      console.warn("API Optimization failed, falling back to local template", e);
-      lastError = e as Error;
+      
+      // Attempt to extract the clean message without the 'Error: ' prefix
+      let cleanMsg = e instanceof Error ? e.message : String(e);
+      if (cleanMsg.startsWith("Error: ")) cleanMsg = cleanMsg.slice(7);
+      
+      console.warn("[Promptly] API Optimization failed, falling back to local template.", cleanMsg);
+      lastError = new Error(cleanMsg);
     }
   }
   

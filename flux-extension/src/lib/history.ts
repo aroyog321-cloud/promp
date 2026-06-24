@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { PromptMode, RewriteLevel } from '@promptly/types';
+import { getSettings } from "./storage";
 
 export interface HistoryEntry {
   id: string;
@@ -35,9 +36,6 @@ function newId(): string {
 
 function isChromeStorageAvailable(): boolean {
   try {
-    // chrome.runtime.id becomes undefined when the extension context is invalidated
-    // (e.g. after a reload/update while the tab is still open). Checking it here
-    // prevents the cryptic "Extension context invalidated" error from bubbling up.
     return (
       typeof chrome !== "undefined" &&
       !!chrome.runtime?.id &&
@@ -48,43 +46,58 @@ function isChromeStorageAvailable(): boolean {
   }
 }
 
+function safeGetStorage(key: string): Promise<any> {
+  return new Promise((resolve) => {
+    if (!isChromeStorageAvailable()) return resolve(undefined);
+    try {
+      chrome.storage.local.get(key, (res) => {
+        if (chrome.runtime.lastError) {
+          console.warn("[Promptly] Storage get error:", chrome.runtime.lastError.message);
+          return resolve(undefined);
+        }
+        resolve(res);
+      });
+    } catch (e) {
+      resolve(undefined);
+    }
+  });
+}
+
+function safeSetStorage(data: any): Promise<void> {
+  return new Promise((resolve) => {
+    if (!isChromeStorageAvailable()) return resolve();
+    try {
+      chrome.storage.local.set(data, () => {
+        if (chrome.runtime.lastError) {
+          console.warn("[Promptly] Storage set error:", chrome.runtime.lastError.message);
+        }
+        resolve();
+      });
+    } catch (e) {
+      resolve();
+    }
+  });
+}
+
 async function readStorage(): Promise<HistoryEntry[]> {
-  if (!isChromeStorageAvailable()) return [];
-  try {
-    const result = await chrome.storage.local.get(STORAGE_KEY);
-    const raw = result?.[STORAGE_KEY];
-    if (!Array.isArray(raw)) return [];
-    return raw as HistoryEntry[];
-  } catch {
-    return [];
-  }
+  const result = await safeGetStorage(STORAGE_KEY);
+  const raw = result?.[STORAGE_KEY];
+  if (!Array.isArray(raw)) return [];
+  return raw as HistoryEntry[];
 }
 
 async function writeStorage(entries: HistoryEntry[]): Promise<void> {
-  if (!isChromeStorageAvailable()) return;
-  try {
-    await chrome.storage.local.set({ [STORAGE_KEY]: entries });
-  } catch {
-    // Extension context may have been invalidated — fail silently
-  }
+  await safeSetStorage({ [STORAGE_KEY]: entries });
 }
 
 async function readPendingQueue(): Promise<Array<Omit<HistoryEntry, "id" | "ts"> & { id: string; ts: number }>> {
-  if (!isChromeStorageAvailable()) return [];
-  try {
-    const result = await chrome.storage.local.get(PENDING_KEY);
-    const raw = result?.[PENDING_KEY];
-    return Array.isArray(raw) ? raw : [];
-  } catch {
-    return [];
-  }
+  const result = await safeGetStorage(PENDING_KEY);
+  const raw = result?.[PENDING_KEY];
+  return Array.isArray(raw) ? raw : [];
 }
 
 async function writePendingQueue(queue: any[]): Promise<void> {
-  if (!isChromeStorageAvailable()) return;
-  try {
-    await chrome.storage.local.set({ [PENDING_KEY]: queue });
-  } catch { /* silent */ }
+  await safeSetStorage({ [PENDING_KEY]: queue });
 }
 
 async function addToPendingQueue(entry: HistoryEntry): Promise<void> {

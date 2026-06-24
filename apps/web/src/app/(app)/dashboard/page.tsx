@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '../../../lib/supabaseBrowser'
+import UpgradeModal from '../../../components/UpgradeModal'
 
 import { BarChart2, Cpu, ArrowRight, Globe, MessageSquare, Bot, Star, Trash2, Copy } from 'lucide-react'
 
@@ -46,6 +47,7 @@ export default function DashboardPage() {
   const [recentPrompts, setRecentPrompts] = useState<any[]>([])
   const [activeMenu, setActiveMenu] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   const supabase = createClient()
@@ -198,7 +200,7 @@ export default function DashboardPage() {
 
   if (loading) return <DashboardSkeleton />
 
-  const optMax = tier === 'free' ? 10 : tier === 'pro' ? 25 : 1000
+  const optMax = tier === 'free' ? 10 : tier === 'pro' ? 50 : 1000
   const optUsed = stats.total_requests_today || 0
   const optLeft = Math.max(0, optMax - optUsed)
   const optPercent = Math.min(100, Math.round((optUsed / optMax) * 100))
@@ -272,10 +274,18 @@ export default function DashboardPage() {
                   <Cpu size={16} className="text-purple-400" />
                 </div>
               </div>
-              <div className="flex items-baseline gap-2">
+              <div className="flex items-center gap-4">
                 <span className="text-4xl font-bold tracking-tight text-white capitalize">{tier} Plan</span>
+                {tier !== 'expert' && (
+                  <button
+                    onClick={() => setShowUpgradeModal(true)}
+                    className="px-4 py-1.5 bg-[#2dd4bf] text-black font-semibold rounded-full text-sm hover:bg-[#2dd4bf]/90 transition-colors shadow-[0_0_15px_rgba(45,212,191,0.2)]"
+                  >
+                    Upgrade
+                  </button>
+                )}
               </div>
-              <p className="text-sm text-zinc-400 mt-2">
+              <p className="text-sm text-zinc-400 mt-3">
                 {tier === 'expert' ? (
                   "Unlimited optimizations remaining today."
                 ) : (
@@ -458,6 +468,15 @@ export default function DashboardPage() {
         </div>
 
       </div>
+      
+      {/* Upgrade Modal */}
+      {user && (
+        <UpgradeModal 
+          isOpen={showUpgradeModal} 
+          onClose={() => setShowUpgradeModal(false)} 
+          user={user} 
+        />
+      )}
     </main>
   )
 }

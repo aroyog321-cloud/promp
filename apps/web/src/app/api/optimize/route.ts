@@ -196,42 +196,112 @@ export async function POST(request: Request) {
     let tier = 'free';
 
     if (user && !supabaseUrl.includes('placeholder')) {
-      const { data: usageResult, error: rpcError } = await supabaseUserClient
-        .rpc('increment_usage', {
-          p_user_id: user.id,
-          p_is_advanced: isTwoPass,
-          p_is_regen: isRegeneration
-        });
+      // --- Manual Usage Tracking (Bypasses missing increment_usage RPC) ---
+      const { data: currentStats } = await supabaseUserClient
+        .from('usage_stats')
+        .select('*')
+        .eq('id', user.id)
+        .single();
 
-      if (rpcError) {
-        console.error("increment_usage RPC error:", rpcError);
-        return NextResponse.json({ error: "Usage tracking error. Please try again." }, { status: 500 });
-      }
+      const today = new Date().toISOString().split('T')[0];
+      const lastReset = currentStats?.last_reset_date ? new Date(currentStats.last_reset_date).toISOString().split('T')[0] : null;
 
-      // RPC returns { error: 'LIMIT_TYPE' } when a quota is exceeded
-      if (usageResult?.error) {
-        const limitMessages: Record<string, string> = {
-          DAILY_LIMIT_REACHED: usageResult.tier === 'free'
-            ? "Daily limit reached (10/10). Upgrade to Pro for 50/day."
-            : "Daily limit reached (50/50). Upgrade to Expert for unlimited.",
-          ADVANCED_LIMIT_REACHED: "Aggressive/Expert limit reached for today (2/2). Upgrade to Pro.",
-          REGEN_LIMIT_REACHED: "Regeneration limit reached for today (4/4). Upgrade to Pro.",
+      let stats = currentStats;
+
+      // Handle daily reset or first-time initialization
+      if (!currentStats || lastReset !== today) {
+        const newRow = {
+          id: user.id,
+          tier: currentStats?.tier || 'free',
+          total_requests_today: 0,
+          regenerations_today: 0,
+          aggressive_expert_today: 0,
+          last_reset_date: new Date().toISOString()
         };
-        return NextResponse.json(
-          { error: limitMessages[usageResult.error] || "Usage limit reached." },
-          { status: 403 }
-        );
+        const { data: upserted, error: upsertError } = await supabaseUserClient
+          .from('usage_stats')
+          .upsert(newRow, { onConflict: 'id' })
+          .select()
+          .single();
+          
+        if (upsertError) {
+          console.error("Initialization error:", upsertError);
+          return NextResponse.json({ error: "Usage initialization error." }, { status: 500 });
+        }
+        stats = upserted || newRow;
       }
 
-      tier = usageResult?.tier || 'free';
+      tier = stats.tier || 'free';
 
-      // Context memory is gated at Pro+ only
-      if (hasContextMemory && tier === 'free') {
-        return NextResponse.json({ error: "Context Memory requires a Pro or Expert plan." }, { status: 403 });
+      // 1. Lock Context Memory for free AND pro
+      if (hasContextMemory && (tier === 'free' || tier === 'pro')) {
+        return NextResponse.json({ error: "Context Memory is locked. Upgrade to Expert." }, { status: 403 });
+      }
+
+      // 2. Enforce Quotas based on true tier limits
+      const maxOpt = tier === 'free' ? 10 : tier === 'pro' ? 50 : Infinity;
+      const maxRegen = tier === 'free' ? 4 : tier === 'pro' ? 50 : Infinity;
+
+      if (!isRegeneration && stats.total_requests_today >= maxOpt) {
+        const msg = tier === 'free' 
+          ? "Daily limit reached (10/10). Upgrade to Pro for 50/day." 
+          : "Daily limit reached (50/50). Upgrade to Expert for unlimited.";
+        return NextResponse.json({ error: msg }, { status: 403 });
+      }
+
+      if (isRegeneration && stats.regenerations_today >= maxRegen) {
+        const msg = tier === 'free'
+          ? "Regeneration limit reached for today (4/4). Upgrade to Pro."
+          : "Regeneration limit reached for today (50/50). Upgrade to Expert.";
+        return NextResponse.json({ error: msg }, { status: 403 });
+      }
+
+      // 3. Perform manual atomic increment
+      const newTotal = stats.total_requests_today + (isRegeneration ? 0 : 1);
+      const newRegen = stats.regenerations_today + (isRegeneration ? 1 : 0);
+      
+      const { error: updateError } = await supabaseUserClient
+        .from('usage_stats')
+        .update({
+          total_requests_today: newTotal,
+          regenerations_today: newRegen
+        })
+        .eq('id', user.id);
+
+      if (updateError) {
+        console.error("Manual usage tracking update error:", updateError);
+        return NextResponse.json({ error: "Usage tracking error. Please try again." }, { status: 500 });
       }
     }
 
-    if (!GEMINI_API_KEY) {
+    // --- Dynamic API Key Lookup ---
+    let dynamicApiKey = null;
+    try {
+      const { data: settingData } = await supabase
+        .from('SystemSetting')
+        .select('value')
+        .eq('key', 'optimize_key')
+        .single();
+      
+      if (settingData && settingData.value) {
+        const { data: keyData } = await supabase
+          .from('ApiKey')
+          .select('secret')
+          .eq('name', settingData.value)
+          .eq('enabled', true)
+          .single();
+          
+        if (keyData && keyData.secret) {
+          dynamicApiKey = keyData.secret;
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch dynamic API key:", e);
+    }
+
+    const FINAL_API_KEY = dynamicApiKey || GEMINI_API_KEY;
+
+    if (!FINAL_API_KEY) {
       console.warn("GEMINI_API_KEY is not set. Falling back to local template.");
       if (body.stream) {
         return NextResponse.json({ error: "Streaming not supported for local fallback" }, { status: 400 });
@@ -257,7 +327,7 @@ export async function POST(request: Request) {
     const systemPrompt = buildSystemPrompt(body.mode, body.level, platform);
     const userPrompt = buildUserPrompt(body);
 
-    const activeApiKey = isTwoPass ? GEMINI_API_KEY_PREMIUM : GEMINI_API_KEY;
+    const activeApiKey = isTwoPass ? (GEMINI_API_KEY_PREMIUM || FINAL_API_KEY) : FINAL_API_KEY;
 
     if (isTwoPass) {
       // Pass 1: Draft (always non-streaming)
@@ -328,8 +398,23 @@ ${draftText}`;
 
   } catch (error) {
     console.error("Optimize endpoint error:", error);
+    
+    // Attempt to stringify the error if it has non-standard properties (e.g., from an RPC call or external API)
+    let details = "Unknown internal error";
+    if (error instanceof Error) {
+      details = error.message;
+    } else if (typeof error === 'object' && error !== null) {
+      try {
+        details = JSON.stringify(error);
+      } catch (e) {
+        details = String(error);
+      }
+    } else {
+      details = String(error);
+    }
+
     return NextResponse.json(
-      { error: "Internal server error", details: error instanceof Error ? error.message : String(error) },
+      { error: "Internal server error", details },
       { status: 500 }
     );
   }

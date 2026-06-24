@@ -217,3 +217,16 @@ model WorkspaceMember {
   @@index([workspaceId])
   @@index([userId])
 }
+
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model ApiKey {
+  name      String   @id
+  secret    String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+}

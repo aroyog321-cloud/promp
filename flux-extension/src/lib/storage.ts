@@ -3,9 +3,15 @@ import { DEFAULT_SETTINGS, PromptlySettings } from '@promptly/types';
 const STORAGE_KEY = "promptly_settings_v1";
 
 export async function getSettings(): Promise<PromptlySettings> {
-  const result = await chrome.storage.local.get(STORAGE_KEY);
-  const stored = result[STORAGE_KEY] as Partial<PromptlySettings> | undefined;
-  return { ...DEFAULT_SETTINGS, ...stored, contextProfile: { ...DEFAULT_SETTINGS.contextProfile, ...(stored?.contextProfile ?? {}) } };
+  try {
+    if (!chrome.runtime?.id) throw new Error("Extension context invalidated");
+    const result = await chrome.storage.local.get(STORAGE_KEY);
+    const stored = result[STORAGE_KEY] as Partial<PromptlySettings> | undefined;
+    return { ...DEFAULT_SETTINGS, ...stored, contextProfile: { ...DEFAULT_SETTINGS.contextProfile, ...(stored?.contextProfile ?? {}) } };
+  } catch (e) {
+    console.warn("[Promptly] Failed to get settings, using defaults.", e);
+    return DEFAULT_SETTINGS;
+  }
 }
 
 export async function setSettings(partial: Partial<PromptlySettings>): Promise<PromptlySettings> {
@@ -15,7 +21,13 @@ export async function setSettings(partial: Partial<PromptlySettings>): Promise<P
     ...partial,
     contextProfile: { ...current.contextProfile, ...(partial.contextProfile ?? {}) }
   };
-  await chrome.storage.local.set({ [STORAGE_KEY]: next });
+  
+  try {
+    if (!chrome.runtime?.id) throw new Error("Extension context invalidated");
+    await chrome.storage.local.set({ [STORAGE_KEY]: next });
+  } catch (e) {
+    console.warn("[Promptly] Failed to set settings.", e);
+  }
   
   // Background Sync
   if (next.accessToken && next.apiBaseUrl && partial.contextProfile) {
@@ -44,8 +56,18 @@ export function onSettingsChanged(callback: (settings: PromptlySettings) => void
       });
     }
   };
-  chrome.storage.onChanged.addListener(listener);
+  try {
+    if (chrome.runtime?.id) {
+      chrome.storage.onChanged.addListener(listener);
+    }
+  } catch(e) {}
+  
   // Return cleanup so callers (e.g. React useEffect) can remove the listener on unmount.
-  // Previously this returned void, causing listeners to stack up indefinitely.
-  return () => chrome.storage.onChanged.removeListener(listener);
+  return () => {
+    try {
+      if (chrome.runtime?.id) {
+        chrome.storage.onChanged.removeListener(listener);
+      }
+    } catch(e) {}
+  };
 }
