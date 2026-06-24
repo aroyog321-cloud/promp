@@ -10,7 +10,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey || supabaseAnonKey
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_API_KEY_PREMIUM = process.env.GEMINI_API_KEY_PREMIUM || process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-pro";
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
 function getLevelConfig(level: string, isCritique: boolean = false) {
   if (isCritique) return { temperature: 0.3, maxOutputTokens: 2048 };
