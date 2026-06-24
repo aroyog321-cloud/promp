@@ -171,7 +171,9 @@ export async function optimizePrompt(
         : `${config.apiBaseUrl.replace(/\/$/, "")}/api/optimize`;
 
       if (isDirectAI) {
-        const platform = req.platform || window.location.hostname || "unknown";
+        const SAFE_PLATFORMS = ['chatgpt.com', 'claude.ai', 'gemini.google.com', 'poe.com', 'perplexity.ai'];
+        const rawPlatform = req.platform || window.location.hostname || "unknown";
+        const platform = SAFE_PLATFORMS.includes(rawPlatform) ? rawPlatform : 'web';
         const systemPrompt = buildSystemPrompt(req.mode, req.level, platform);
         const userPrompt = buildUserPrompt(req);
         const isTwoPass = req.level === "aggressive" || req.level === "expert";

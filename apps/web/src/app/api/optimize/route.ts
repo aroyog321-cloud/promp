@@ -397,24 +397,12 @@ ${draftText}`;
     }
 
   } catch (error) {
+    // Log the full error to the console for debugging
     console.error("Optimize endpoint error:", error);
-    
-    // Attempt to stringify the error if it has non-standard properties (e.g., from an RPC call or external API)
-    let details = "Unknown internal error";
-    if (error instanceof Error) {
-      details = error.message;
-    } else if (typeof error === 'object' && error !== null) {
-      try {
-        details = JSON.stringify(error);
-      } catch (e) {
-        details = String(error);
-      }
-    } else {
-      details = String(error);
-    }
 
+    // Return a generic error to avoid leaking system internals
     return NextResponse.json(
-      { error: "Internal server error", details },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }

@@ -35,7 +35,8 @@ export async function GET(request: Request) {
     });
 
     const url = new URL(request.url);
-    const limit = parseInt(url.searchParams.get('limit') || '50', 10);
+    const rawLimit = parseInt(url.searchParams.get('limit') || '50', 10);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 200) : 50;
 
     const { data: history, error: historyError } = await supabaseUserClient
       .from('PromptHistory')
@@ -114,13 +115,13 @@ export async function POST(request: Request) {
 
     if (insertError) {
       console.error("Supabase Insert Error:", insertError);
-      return NextResponse.json({ error: "Supabase Insert Error", details: insertError }, { status: 500 });
+      return NextResponse.json({ error: "Failed to save entry. Please try again." }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, id: data.id });
   } catch (error) {
     console.error("POST /api/history error:", error);
-    return NextResponse.json({ error: "Internal Server Error", details: error instanceof Error ? error.message : String(error) }, { status: 500 });
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
 
@@ -149,7 +150,7 @@ export async function DELETE(request: Request) {
 
     if (deleteError) {
       console.error('Delete error:', deleteError);
-      return NextResponse.json({ error: 'Delete failed', details: deleteError }, { status: 500 });
+      return NextResponse.json({ error: 'Delete failed. Please try again.' }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
@@ -185,7 +186,7 @@ export async function PATCH(request: Request) {
 
     if (updateError) {
       console.error("Star sync error:", updateError);
-      return NextResponse.json({ error: "Update failed", details: updateError }, { status: 500 });
+      return NextResponse.json({ error: "Update failed. Please try again." }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });

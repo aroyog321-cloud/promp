@@ -58,7 +58,6 @@ function bootstrap(platform: PlatformConfig) {
 
   const host = document.createElement("div");
   host.id = "promptly-prompt-optimizer-root";
-  host.setAttribute("data-theme", window.location.hostname.replace(/^www\./, ''));
   host.style.position = "fixed";
   host.style.top = "0";
   host.style.left = "0";

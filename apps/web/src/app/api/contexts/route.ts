@@ -49,16 +49,19 @@ export async function POST(request: Request) {
 
     const isExisting = existingProfiles && existingProfiles.length > 0;
 
+    const MAX_FIELD = 500;
+    const sanitize = (v: unknown) => typeof v === 'string' ? v.slice(0, MAX_FIELD) : null;
+
     const payload = {
       userId: user.id,
       name: 'Extension Profile',
       isDefault: true,
-      companyName: contextProfile.companyName || null,
-      websiteURL: contextProfile.websiteUrl || null,
-      industry: contextProfile.industry || null,
-      audience: contextProfile.audience || null,
-      writingStyle: contextProfile.writingStyle || null,
-      brandTone: contextProfile.brandTone || null,
+      companyName: sanitize(contextProfile.companyName),
+      websiteURL: sanitize(contextProfile.websiteUrl),
+      industry: sanitize(contextProfile.industry),
+      audience: sanitize(contextProfile.audience),
+      writingStyle: sanitize(contextProfile.writingStyle),
+      brandTone: sanitize(contextProfile.brandTone),
     };
 
     if (isExisting) {
