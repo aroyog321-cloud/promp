@@ -1,6 +1,21 @@
 import { OptimizeRequest, OptimizeResponse, PromptMode } from '@promptly/types';
 import { localOptimize, buildSystemPrompt, buildUserPrompt, getLevelConfig } from '@promptly/prompt-engine';
 
+class SimpleCache<K, V> {
+  private map = new Map<K, V>();
+  constructor(private maxSize: number = 20) {}
+  get(key: K) { return this.map.get(key); }
+  set(key: K, value: V) {
+    if (this.map.size >= this.maxSize) {
+      const firstKey = this.map.keys().next().value;
+      if (firstKey) this.map.delete(firstKey);
+    }
+    this.map.set(key, value);
+  }
+  has(key: K) { return this.map.has(key); }
+}
+
+const PROMPT_CACHE = new SimpleCache<string, OptimizeResponse>(20);
 
 
 async function directAIFetch(endpoint: string, apiKey: string | undefined, messages: any[], config: any, stream: boolean, onChunk?: (chunk: string) => void, signal?: AbortSignal) {
@@ -152,6 +167,26 @@ export async function optimizePrompt(
     req.mode = await resolveMode(req, config);
   }
 
+  const cacheKey = JSON.stringify({
+    text: req.text,
+    mode: req.mode,
+    level: req.level,
+    style: req.style,
+    context: req.context
+  });
+
+  if (!req.refinement && PROMPT_CACHE.has(cacheKey)) {
+    const cached = PROMPT_CACHE.get(cacheKey)!;
+    if (options?.onChunk) {
+      // Simulate streaming for cached response
+      const text = cached.optimized;
+      for (let i = 0; i < text.length; i += 50) {
+        options.onChunk(text.substring(i, i + 50));
+        await new Promise(r => setTimeout(r, 10));
+      }
+    }
+    return cached;
+  }
 
   if (config.apiBaseUrl) {
     try {
