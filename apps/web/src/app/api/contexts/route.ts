@@ -2,11 +2,10 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 import { requireEnv } from '@/lib/env';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL');
 const supabaseAnonKey = requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
-const supabaseServiceKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function POST(request: Request) {
   try {
@@ -16,7 +15,7 @@ export async function POST(request: Request) {
     }
     const token = authHeader.split(' ')[1];
 
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    const { data: { user }, error: authError } = await getSupabaseAdmin().auth.getUser(token);
     if (authError || !user) {
       return NextResponse.json({ error: "Invalid Access Token." }, { status: 401 });
     }
@@ -95,7 +94,7 @@ export async function GET(request: Request) {
     }
     const token = authHeader.split(' ')[1];
 
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    const { data: { user }, error: authError } = await getSupabaseAdmin().auth.getUser(token);
     if (authError || !user) {
       return NextResponse.json({ error: "Invalid Access Token." }, { status: 401 });
     }

@@ -3,9 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 
 import { requireEnv } from '@/lib/env';
 
-const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL');
-const supabaseKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
-const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 export async function GET(request: Request) {
   try {
@@ -27,7 +25,7 @@ export async function GET(request: Request) {
     let keepGoing = true;
     while (keepGoing) {
       // Supabase doesn't support LIMIT on DELETE directly; select IDs first.
-      const { data: ids, error: selectError } = await supabaseAdmin
+      const { data: ids, error: selectError } = await getSupabaseAdmin()
         .from('PromptHistory')
         .select('id')
         .eq('isStarred', false)
@@ -41,7 +39,7 @@ export async function GET(request: Request) {
 
       if (!ids || ids.length === 0) { keepGoing = false; break; }
 
-      const { error: deleteError } = await supabaseAdmin
+      const { error: deleteError } = await getSupabaseAdmin()
         .from('PromptHistory')
         .delete()
         .in('id', ids.map((r: { id: string }) => r.id));
@@ -58,7 +56,7 @@ export async function GET(request: Request) {
     // FIX 3.27: Reset daily request counters so users aren't locked out forever.
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const { error: resetError } = await supabaseAdmin
+    const { error: resetError } = await getSupabaseAdmin()
       .from('usage_stats')
       .update({
         total_requests_today: 0,

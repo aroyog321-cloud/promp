@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { requireEnv } from '@/lib/env';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL');
 const supabaseAnonKey = requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
@@ -12,7 +12,7 @@ export async function authenticateRequest(request: Request) {
   }
   const token = authHeader.split(' ')[1];
 
-  const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+  const { data: { user }, error: authError } = await getSupabaseAdmin().auth.getUser(token);
   if (authError || !user) {
     return { error: "Invalid Access Token. Please log in again at proenpt.com.", status: 401 };
   }
@@ -21,5 +21,5 @@ export async function authenticateRequest(request: Request) {
     global: { headers: { Authorization: `Bearer ${token}` } }
   });
 
-  return { user, supabaseUserClient, supabaseAdmin };
+  return { user, supabaseUserClient, supabaseAdmin: getSupabaseAdmin() };
 }

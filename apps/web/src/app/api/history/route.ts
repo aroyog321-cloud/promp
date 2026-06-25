@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { requireEnv } from '@/lib/env';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL');
 const supabaseAnonKey = requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
@@ -13,7 +13,7 @@ function getAuthToken(request: Request) {
 }
 
 async function getUser(token: string) {
-  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+  const { data: { user }, error } = await getSupabaseAdmin().auth.getUser(token);
   if (error) console.error("getUser error:", error);
   return error ? null : user;
 }
@@ -38,7 +38,7 @@ export async function GET(request: Request) {
 
     let query = supabaseUserClient
       .from('PromptHistory')
-      .select('id, platformUsed, promptMode, rewriteLevel, createdAt, isStarred, originalPrompt, responseTime')
+      .select('id, platformUsed, promptMode, rewriteLevel, createdAt, isStarred, originalPrompt, optimizedPrompt, responseTime')
       .eq('userId', user.id)
       .order('createdAt', { ascending: false })
       .limit(limit);

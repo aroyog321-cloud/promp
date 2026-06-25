@@ -73,6 +73,7 @@ export default async function proxy(request: NextRequest) {
     'https://app.proenpt.com',
   ]);
   
+  const origin = request.headers.get('origin') || '';
   const allowedOrigin = ALLOWED_ORIGINS.has(origin) || origin.startsWith('chrome-extension://')
     ? origin
     : 'null';

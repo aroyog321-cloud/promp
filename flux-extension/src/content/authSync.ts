@@ -43,7 +43,7 @@ async function saveToken(token: string, apiBaseUrl: string) {
     chrome.runtime.sendMessage({ type: "PROMPTLY_TOKEN_SAVED_DRAIN_HISTORY" }).catch(() => {});
     
     // Stop announcing since we got the token
-    if (typeof announceInterval !== "undefined") clearInterval(announceInterval);
+    if (announceInterval !== null) clearInterval(announceInterval);
   } catch (e) {
     console.warn("[Promptly] Extension context invalidated during auth sync", e);
   }
@@ -56,10 +56,11 @@ function announce() {
 // Announce repeatedly for the first 30s to defeat race conditions with React hydration      
 announce();
 let announceCount = 0;
-const announceInterval = setInterval(() => {
+let announceInterval: ReturnType<typeof setInterval> | null = null;
+announceInterval = setInterval(() => {
   announceCount++;
   announce();
-  if (announceCount >= 10) clearInterval(announceInterval);
+  if (announceCount >= 10 && announceInterval !== null) clearInterval(announceInterval);
 }, 2000);
 
 window.addEventListener("message", async (event) => {

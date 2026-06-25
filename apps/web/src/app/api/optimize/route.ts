@@ -40,14 +40,26 @@ export const POST = withMetrics(async (request: Request) => {
     const isRegeneration = !!body.refinement || !!body.previousPrompt;
     const hasContextMemory = !!body.context && Object.values(body.context).some(v => !!v);
 
-    let tier = 'free';
-    const billingResult = await checkQuotaAndTier(supabaseUserClient, user.id, isRegeneration, hasContextMemory);
+    // Parallelize independent remote calls
+    const billingPromise = checkQuotaAndTier(supabaseUserClient, user.id, isRegeneration, hasContextMemory);
+    const apiKeyPromise = getDynamicApiKey(supabaseAdmin, GEMINI_API_KEY);
+    let classifyPromise: Promise<any> | null = null;
+    
+    if (body.mode === "auto") {
+      // Use fallback key for classification to parallelize
+      classifyPromise = classifyPromptMode(body.text, GEMINI_API_KEY);
+    }
+
+    const [billingResult, dynamicApiKey, classifiedMode] = await Promise.all([
+      billingPromise,
+      apiKeyPromise,
+      classifyPromise
+    ]);
+
     if (billingResult.error) {
       return NextResponse.json({ error: billingResult.error }, { status: billingResult.status });
     }
-    tier = billingResult.tier || 'free';
-
-    const dynamicApiKey = await getDynamicApiKey(supabaseAdmin, GEMINI_API_KEY);
+    const tier = billingResult.tier || 'free';
     const FINAL_API_KEY = dynamicApiKey || GEMINI_API_KEY;
 
     if (!FINAL_API_KEY) {
@@ -72,10 +84,7 @@ export const POST = withMetrics(async (request: Request) => {
     const isTrustedOrigin = rawOrigin.startsWith("chrome-extension://") || ALLOWED_ORIGINS.includes(rawOrigin);
     const platform = isTrustedOrigin ? rawOrigin : undefined;
 
-    let resolvedMode = body.mode;
-    if (body.mode === "auto") {
-      resolvedMode = await classifyPromptMode(body.text, FINAL_API_KEY) as any;
-    }
+    const resolvedMode = classifiedMode ? classifiedMode : body.mode;
 
     const systemPrompt = await buildSystemPrompt(resolvedMode, body.level, platform);
     const userPrompt = buildUserPrompt(body);

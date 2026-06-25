@@ -171,7 +171,7 @@ const PromptlyApp: React.FC<{ platform: PlatformConfig }> = ({ platform }) => {
       updateTimeout = window.setTimeout(() => {
         if (animationFrameId) window.cancelAnimationFrame(animationFrameId);
         animationFrameId = window.requestAnimationFrame(update);
-      }, 150);
+      }, 50);
     };
 
     update();

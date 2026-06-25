@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { captureError } from '@/services/monitoring';
 
 export function withMetrics(routeHandler: (request: Request, ...args: any[]) => Promise<Response>) {
@@ -31,7 +31,7 @@ export function withMetrics(routeHandler: (request: Request, ...args: any[]) => 
       // Note: We use daily aggregates. For a raw log, we can just insert and let a cron aggregate.
       // Alternatively, we can use an RPC to do UPSERT for aggregates.
       // For now, we'll log raw metrics. A production system would use an aggregate query.
-      supabaseAdmin.from('ApiMetrics').insert([{
+      getSupabaseAdmin().from('ApiMetrics').insert([{
         route,
         status,
         duration,
