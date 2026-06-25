@@ -2,6 +2,15 @@ import { PromptMode, RewriteLevel } from "@promptly/types";
 import { MODE_RECIPES } from "./modeRecipes";
 import { LEVEL_CONFIGS } from "./levelConfigs";
 
+import { examples as businessExamples } from "./examples/business";
+import { examples as contentCreatorExamples } from "./examples/content-creator";
+import { examples as designerExamples } from "./examples/designer";
+import { examples as developerExamples } from "./examples/developer";
+import { examples as generalExamples } from "./examples/general";
+import { examples as marketingExamples } from "./examples/marketing";
+import { examples as researchExamples } from "./examples/research";
+import { examples as startupFounderExamples } from "./examples/startup-founder";
+
 export async function buildSystemPrompt(mode: PromptMode, level: RewriteLevel, platform?: string): Promise<string> {
   const isExpert = level === "expert";
   const isAdvanced = level === "aggressive" || level === "expert";
@@ -115,19 +124,19 @@ ${platformHint}
 Study these examples — pay attention not just to what sections exist, but to how precise and specific each line is. Generic version vs. what you should produce:
 
 `;
-    // We statically map examples to avoid bundler issues (Vite/Webpack dynamic import warnings)
+    // We statically map examples to avoid bundler issues (Vite/Webpack dynamic import warnings and extension context 404s)
     let loadedExamples: string[] = [];
     switch (mode) {
-      case "business": loadedExamples = (await import("./examples/business")).examples; break;
-      case "content-creator": loadedExamples = (await import("./examples/content-creator")).examples; break;
-      case "designer": loadedExamples = (await import("./examples/designer")).examples; break;
-      case "developer": loadedExamples = (await import("./examples/developer")).examples; break;
-      case "marketing": loadedExamples = (await import("./examples/marketing")).examples; break;
-      case "research": loadedExamples = (await import("./examples/research")).examples; break;
-      case "startup-founder": loadedExamples = (await import("./examples/startup-founder")).examples; break;
+      case "business": loadedExamples = businessExamples; break;
+      case "content-creator": loadedExamples = contentCreatorExamples; break;
+      case "designer": loadedExamples = designerExamples; break;
+      case "developer": loadedExamples = developerExamples; break;
+      case "marketing": loadedExamples = marketingExamples; break;
+      case "research": loadedExamples = researchExamples; break;
+      case "startup-founder": loadedExamples = startupFounderExamples; break;
       case "general":
       default:
-        loadedExamples = (await import("./examples/general")).examples; break;
+        loadedExamples = generalExamples; break;
     }
 
     if (loadedExamples.length > 0) {
