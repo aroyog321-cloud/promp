@@ -7,7 +7,8 @@ export async function makeGeminiCall(
   userPrompt: string, 
   stream: boolean, 
   config: { temperature: number, maxOutputTokens: number }, 
-  apiKey: string
+  apiKey: string,
+  routeSignal?: AbortSignal
 ) {
   const endpoint = stream 
     ? `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse&key=${apiKey}`
@@ -20,8 +21,17 @@ export async function makeGeminiCall(
   while (attempt < maxAttempts) {
     attempt++;
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 45000);
+      let finalSignal: AbortSignal;
+      
+      if (routeSignal) {
+        // If AbortSignal.any is available (Node 20+), use it to combine the route timeout and the retry timeout.
+        // Otherwise, fall back to the routeSignal which has a 50s timeout.
+        finalSignal = typeof AbortSignal.any === 'function' 
+          ? AbortSignal.any([routeSignal, AbortSignal.timeout(45000)])
+          : routeSignal;
+      } else {
+        finalSignal = AbortSignal.timeout(45000);
+      }
       
       const response = await fetch(endpoint, {
         method: "POST",
@@ -36,10 +46,8 @@ export async function makeGeminiCall(
             maxOutputTokens: config.maxOutputTokens,
           }
         }),
-        signal: controller.signal
+        signal: finalSignal
       });
-
-      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const isRetryable = [429, 500, 502, 503, 504].includes(response.status);
@@ -60,7 +68,7 @@ export async function makeGeminiCall(
       return response;
     } catch (e: any) {
       lastError = e;
-      if (e.name === 'AbortError' && attempt < maxAttempts) {
+      if ((e.name === 'AbortError' || e.name === 'TimeoutError') && attempt < maxAttempts) {
         const delay = Math.pow(2, attempt) * 1000;
         await new Promise(res => setTimeout(res, delay));
         continue;

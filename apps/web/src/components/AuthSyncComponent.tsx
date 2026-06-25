@@ -26,7 +26,11 @@ export function AuthSyncComponent({ accessToken, onStatusChange }: { accessToken
       if (event.source !== window) return
       
       if (event.data?.type === "PROMPTLY_EXTENSION_READY") {
-        window.postMessage({ type: "PROMPTLY_AUTH_TOKEN", token: accessToken }, window.location.origin)
+        if (accessToken) {
+          const timestamp = Date.now();
+          const nonce = Math.random().toString(36).substring(2) + timestamp.toString(36);
+          window.postMessage({ type: "PROMPTLY_AUTH_TOKEN", token: accessToken, timestamp, nonce }, window.location.origin)
+        }
       } else if (event.data?.type === "PROMPTLY_AUTH_SYNCED") {
         isSynced = true;
         setStatus('synced')

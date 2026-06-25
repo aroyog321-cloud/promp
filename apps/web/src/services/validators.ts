@@ -12,6 +12,9 @@ export function validateOptimizeRequest(bodyText: string): { body: OptimizeReque
     return { body: null, error: "Missing required fields", status: 400 };
   }
 
+  // Strip control characters to prevent injection of \u0000 or \r\n\r\n etc.
+  body.text = body.text.replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '').trim();
+
   if (body.text.length > 8000) {
     return { body: null, error: "Prompt too long. Maximum 8,000 characters.", status: 400 };
   }

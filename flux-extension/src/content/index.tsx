@@ -163,18 +163,29 @@ const PromptlyApp: React.FC<{ platform: PlatformConfig }> = ({ platform }) => {
       });
     };
 
+    let updateTimeout: number | null = null;
+    let animationFrameId: number | null = null;
+
+    const scheduleUpdate = () => {
+      if (updateTimeout) window.clearTimeout(updateTimeout);
+      updateTimeout = window.setTimeout(() => {
+        if (animationFrameId) window.cancelAnimationFrame(animationFrameId);
+        animationFrameId = window.requestAnimationFrame(update);
+      }, 150);
+    };
+
     update();
-    const observer = new MutationObserver(update);
+    const observer = new MutationObserver(scheduleUpdate);
     observer.observe(document.body, { childList: true, subtree: true });
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    const interval = window.setInterval(update, 1000);
+    window.addEventListener("resize", scheduleUpdate);
+    window.addEventListener("scroll", scheduleUpdate, true);
 
     return () => {
       observer.disconnect();
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-      window.clearInterval(interval);
+      window.removeEventListener("resize", scheduleUpdate);
+      window.removeEventListener("scroll", scheduleUpdate, true);
+      if (updateTimeout) window.clearTimeout(updateTimeout);
+      if (animationFrameId) window.cancelAnimationFrame(animationFrameId);
     };
   }, [platform]);
 

@@ -1,9 +1,8 @@
 import { PromptMode, RewriteLevel } from "@promptly/types";
 import { MODE_RECIPES } from "./modeRecipes";
-import { FEW_SHOT_EXAMPLES } from "./fewShotExamples";
 import { LEVEL_CONFIGS } from "./levelConfigs";
 
-export function buildSystemPrompt(mode: PromptMode, level: RewriteLevel, platform?: string): string {
+export async function buildSystemPrompt(mode: PromptMode, level: RewriteLevel, platform?: string): Promise<string> {
   const isExpert = level === "expert";
   const isAdvanced = level === "aggressive" || level === "expert";
   const recipe = MODE_RECIPES[mode] || MODE_RECIPES.general;
@@ -116,12 +115,25 @@ ${platformHint}
 Study these examples — pay attention not just to what sections exist, but to how precise and specific each line is. Generic version vs. what you should produce:
 
 `;
-    const examples = FEW_SHOT_EXAMPLES.split("### Example ");
-    prompt += levelConfig.examplesToShow
-      .filter((i) => i < examples.length)
-      .map((i) => "### Example " + examples[i])
-      .join("\n\n");
-    prompt += "\n\n";
+    let loadedExamples: string[] = [];
+    try {
+      const mod = await import(`./examples/${mode}`);
+      loadedExamples = mod.examples || [];
+    } catch (e) {
+      // Fallback if no specific examples for this mode yet
+      try {
+        const mod = await import("./examples/general");
+        loadedExamples = mod.examples || [];
+      } catch (e2) {}
+    }
+
+    if (loadedExamples.length > 0) {
+      prompt += levelConfig.examplesToShow
+        .filter((i) => i < loadedExamples.length)
+        .map((i) => loadedExamples[i])
+        .join("\n\n");
+      prompt += "\n\n";
+    }
   }
 
   // ─── OUTPUT RULES ─────────────────────────────────────────────────────────

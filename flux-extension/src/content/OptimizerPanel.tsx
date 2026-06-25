@@ -219,12 +219,9 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
       }
 
       setToast("Inserted ✓");
-      // FIX 3.13: Only call onReplace once, inside the timeout after the toast.
-      // The original code called it both immediately AND after 1s, inserting text twice.
-      setTimeout(() => {
-        onReplace(finalOutput);
-        onClose();
-      }, 1000);
+      // Call onReplace immediately to feel responsive
+      onReplace(finalOutput);
+      onClose();
     }
   };
 

@@ -239,21 +239,26 @@ export const useHistory = create<HistoryState>((set, get) => ({
       const accessToken = auth?.accessToken || settings.accessToken;
 
       if (apiBaseUrl && accessToken) {
-        // Token available — POST immediately
-        const { ok, serverId } = await postEntryToServer(entry, {
-          accessToken,
-          apiBaseUrl,
-        });
-        if (ok && serverId) {
-          const updated = get().entries.map((e) =>
-            e.id === entry.id ? { ...e, id: serverId } : e
-          );
-          set({ entries: updated });
-          await writeStorage(updated);
-        } else if (!ok) {
-          // POST failed despite having a token (network hiccup, server error).
-          // Queue it for retry on next hydration/token refresh.
-          await addToPendingQueue(entry);
+        if (entry.source === "api") {
+          // Optimization happened on the server; the server already saved it to the DB.
+          // Nothing to do.
+        } else {
+          // Token available and it's a local optimization — POST immediately
+          const { ok, serverId } = await postEntryToServer(entry, {
+            accessToken,
+            apiBaseUrl,
+          });
+          if (ok && serverId) {
+            const updated = get().entries.map((e) =>
+              e.id === entry.id ? { ...e, id: serverId } : e
+            );
+            set({ entries: updated });
+            await writeStorage(updated);
+          } else if (!ok) {
+            // POST failed despite having a token (network hiccup, server error).
+            // Queue it for retry on next hydration/token refresh.
+            await addToPendingQueue(entry);
+          }
         }
       } else {
         // No token yet — queue so we can retry once the user visits the website
@@ -306,11 +311,7 @@ export const useHistory = create<HistoryState>((set, get) => ({
 
     try {
       const settings = await getSettings();
-      const CORRECT_URL = "https://proenpt.vercel.app";
-      const wrongUrls = ["https://api.promptly-optimizer.app"];
-      const rawUrl = settings.apiBaseUrl;
-      const apiBaseUrl =
-        !rawUrl || wrongUrls.includes(rawUrl) ? CORRECT_URL : rawUrl;
+      const apiBaseUrl = settings.apiBaseUrl;
       const accessToken = settings.accessToken;
 
       if (apiBaseUrl && accessToken) {

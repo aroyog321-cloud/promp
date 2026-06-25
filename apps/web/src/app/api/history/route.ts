@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-
 import { requireEnv } from '@/lib/env';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL');
 const supabaseAnonKey = requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
-const supabaseServiceKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 function getAuthToken(request: Request) {
   const authHeader = request.headers.get('authorization');
@@ -35,15 +33,23 @@ export async function GET(request: Request) {
     });
 
     const url = new URL(request.url);
-    const rawLimit = parseInt(url.searchParams.get('limit') || '50', 10);
-    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 200) : 50;
+    const rawLimit = parseInt(url.searchParams.get('limit') || '30', 10);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 200) : 30;
 
-    const { data: history, error: historyError } = await supabaseUserClient
+    let query = supabaseUserClient
       .from('PromptHistory')
-      .select('*')
+      .select('id, platformUsed, promptMode, rewriteLevel, createdAt, isStarred, originalPrompt, responseTime')
       .eq('userId', user.id)
       .order('createdAt', { ascending: false })
       .limit(limit);
+
+    // Optional: cursor-based pagination
+    const cursor = url.searchParams.get('cursor');
+    if (cursor) {
+      query = query.lt('createdAt', cursor);
+    }
+
+    const { data: history, error: historyError } = await query;
 
     if (historyError) throw historyError;
 

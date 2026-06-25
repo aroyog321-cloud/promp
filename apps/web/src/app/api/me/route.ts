@@ -5,8 +5,8 @@ import { requireEnv } from '@/lib/env';
 
 const supabaseUrl = requireEnv('NEXT_PUBLIC_SUPABASE_URL');
 const supabaseAnonKey = requireEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const supabase = createClient(supabaseUrl, supabaseServiceKey || supabaseAnonKey);
+const supabaseServiceKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function GET(request: Request) {
   try {

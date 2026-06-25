@@ -1,38 +1,6 @@
 import { OptimizeRequest, OptimizeResponse, PromptMode } from '@promptly/types';
 import { localOptimize, buildSystemPrompt, buildUserPrompt, getLevelConfig } from '@promptly/prompt-engine';
 
-class LRUCache<K, V> {
-  private max: number;
-  private cache: Map<K, V>;
-
-  constructor(max = 50) {
-    this.max = max;
-    this.cache = new Map();
-  }
-
-  get(key: K): V | undefined {
-    if (!this.cache.has(key)) return undefined;
-    const val = this.cache.get(key)!;
-    this.cache.delete(key);
-    this.cache.set(key, val);
-    return val;
-  }
-
-  set(key: K, val: V) {
-    if (this.cache.has(key)) this.cache.delete(key);
-    this.cache.set(key, val);
-    if (this.cache.size > this.max) {
-      const firstKey = this.cache.keys().next().value;
-      if (firstKey !== undefined) this.cache.delete(firstKey);
-    }
-  }
-
-  has(key: K): boolean {
-    return this.cache.has(key);
-  }
-}
-
-const PROMPT_CACHE = new LRUCache<string, OptimizeResponse>(50);
 
 
 async function directAIFetch(endpoint: string, apiKey: string | undefined, messages: any[], config: any, stream: boolean, onChunk?: (chunk: string) => void, signal?: AbortSignal) {
@@ -184,16 +152,6 @@ export async function optimizePrompt(
     req.mode = await resolveMode(req, config);
   }
 
-  const cacheKey = JSON.stringify({ 
-    text: req.text, 
-    mode: req.mode, 
-    level: req.level, 
-    refinement: req.refinement,
-    previousPrompt: req.previousPrompt
-  });
-  if (!req.refinement && PROMPT_CACHE.has(cacheKey) && !options?.onChunk) {
-    // return PROMPT_CACHE.get(cacheKey)!; // Disabled cache to ensure all history syncs to server
-  }
 
   if (config.apiBaseUrl) {
     try {
@@ -206,7 +164,7 @@ export async function optimizePrompt(
         const SAFE_PLATFORMS = ['chatgpt.com', 'claude.ai', 'gemini.google.com', 'poe.com', 'perplexity.ai'];
         const rawPlatform = req.platform || window.location.hostname || "unknown";
         const platform = SAFE_PLATFORMS.includes(rawPlatform) ? rawPlatform : 'web';
-        const systemPrompt = buildSystemPrompt(req.mode, req.level, platform);
+        const systemPrompt = await buildSystemPrompt(req.mode, req.level, platform);
         const userPrompt = buildUserPrompt(req);
         const isTwoPass = req.level === "aggressive" || req.level === "expert";
 
@@ -325,13 +283,16 @@ ${draftText}`;
           const reader = res.body.getReader();
           const decoder = new TextDecoder();
           let fullText = "";
+          let sseBuffer = ""; // buffer for partial SSE lines spanning chunk boundaries
           
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
             
             const chunk = decoder.decode(value, { stream: true });
-            const lines = chunk.split('\n');
+            sseBuffer += chunk;
+            const lines = sseBuffer.split('\n');
+            sseBuffer = lines.pop() ?? ""; // keep the last partial line in the buffer
             
             for (const line of lines) {
               if (line.startsWith('data: ')) {
@@ -342,7 +303,7 @@ ${draftText}`;
                   if (data.choices && data.choices[0]?.delta?.content) {
                     const delta = data.choices[0].delta.content;
                     fullText += delta;
-                    options.onChunk(delta); // Send delta only
+                    options.onChunk(delta);
                   }
                 } catch (e) {}
               }

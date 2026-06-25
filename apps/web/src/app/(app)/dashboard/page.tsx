@@ -32,11 +32,15 @@ const DashboardSkeleton = () => (
   </main>
 )
 
+import { useRouter } from 'next/navigation'
+
 export default function DashboardPage() {
+  const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [tier, setTier] = useState<'free' | 'pro' | 'expert'>('free')
   const [token, setToken] = useState<string | null>(null)
+  const [authError, setAuthError] = useState<string | null>(null)
   
   const [stats, setStats] = useState<any>({
     total_requests_today: 0,
@@ -58,8 +62,8 @@ export default function DashboardPage() {
       const error = params.get('error')
       const errorDescription = params.get('error_description')
       if (error) {
-        alert(`Authentication Failed: ${errorDescription || error}\n\nPlease try signing up or logging in again.`)
-        window.location.href = '/login'
+        setAuthError(`Authentication Failed: ${errorDescription || error}`)
+        setTimeout(() => router.push('/login'), 3000)
         return
       }
     }
@@ -67,16 +71,17 @@ export default function DashboardPage() {
     async function loadData() {
       try {
         const { data: { session } } = await supabase.auth.getSession()
-        const currentUser = session?.user || null
-        const currentToken = session?.access_token || null
+        const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser()
         
-        if (!currentUser) {
-          window.location.href = '/login'
+        if (userError || !currentUser) {
+          router.push('/login')
           return
         }
         
+        const isEmailConfirmed = !!currentUser.email_confirmed_at
+        
         setUser(currentUser)
-        setToken(currentToken)
+        setToken(session?.access_token || null)
         
         // Load Usage Stats
         const { data: statsData, error: statsError } = await supabase
@@ -122,7 +127,7 @@ export default function DashboardPage() {
 
       } catch (err) {
         console.error('Error loading user data:', err)
-        window.location.href = '/login'
+        router.push('/login')
       } finally {
         setLoading(false)
       }
@@ -198,6 +203,17 @@ export default function DashboardPage() {
     }
   }, [user])
 
+  if (authError) {
+    return (
+      <main className="min-h-[calc(100vh-73px)] pb-32 flex items-center justify-center bg-background text-foreground">
+        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-6 rounded-2xl max-w-md text-center">
+          <p className="font-semibold">{authError}</p>
+          <p className="text-sm mt-2 opacity-80">Redirecting to login...</p>
+        </div>
+      </main>
+    )
+  }
+
   if (loading) return <DashboardSkeleton />
 
   const optMax = tier === 'free' ? 10 : tier === 'pro' ? 50 : 1000
@@ -232,43 +248,218 @@ export default function DashboardPage() {
           </p>
         </header>
 
-        <div className="mb-8 bg-[#1a1a1c] border border-white/[0.04] rounded-2xl p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-sm font-semibold tracking-wide text-zinc-300">Optimization Metrics</h2>
-            <div className="text-xs text-zinc-500">Coming soon</div>
+        {/* Top Row: Requests Today, Plan, Prompt Quality */}
+        <div className="grid md:grid-cols-3 gap-6 mb-8">
+          
+          {/* Card: Requests Today */}
+          <div className="bg-[#1a1a1c] border border-white/[0.04] rounded-2xl p-6 flex flex-col justify-between">
+            <div>
+              <div className="flex justify-between items-start mb-4">
+                <span className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Requests Today</span>
+                <div className="size-8 rounded-lg bg-white/5 border border-white/5 flex items-center justify-center">
+                  <BarChart2 size={16} className="text-blue-400" />
+                </div>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-4xl font-bold tracking-tight text-white">{optUsed}</span>
+                {tier !== 'expert' && <span className="text-xl font-bold tracking-tight text-zinc-600">/{optMax}</span>}
+              </div>
+            </div>
+            {tier !== 'expert' && (
+              <div className="mt-6">
+                <div className="flex justify-between text-xs text-zinc-400 mb-2 font-medium">
+                  <span>Utilization</span>
+                  <span>{optPercent}%</span>
+                </div>
+                <div className="h-1.5 bg-black/40 rounded-full overflow-hidden">
+                  <div className="h-full bg-blue-500 rounded-full transition-all duration-700" style={{ width: `${optPercent}%` }} />
+                </div>
+              </div>
+            )}
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+          {/* Card: Plan */}
+          <div className="bg-[#1a1a1c] border border-white/[0.04] rounded-2xl p-6 flex flex-col justify-between">
             <div>
-              <div className="text-2xl font-bold text-white">0</div>
-              <div className="text-xs text-zinc-400 mt-1">Avg Latency (ms)</div>
+              <div className="flex justify-between items-start mb-4">
+                <span className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Current Plan</span>
+                <div className="size-8 rounded-lg bg-white/5 border border-white/5 flex items-center justify-center">
+                  <Cpu size={16} className="text-purple-400" />
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <span className="text-3xl font-bold tracking-tight text-white capitalize">{tier} Plan</span>
+                <p className="text-sm text-zinc-400">
+                  {tier === 'expert' ? "Unlimited optimizations." : `${optLeft} optimizations left today.`}
+                </p>
+              </div>
             </div>
+            {tier !== 'expert' && (
+              <div className="mt-4">
+                <button
+                  onClick={() => setShowUpgradeModal(true)}
+                  className="w-full px-4 py-2 bg-white/5 hover:bg-white/10 text-white font-medium rounded-lg text-sm transition-colors border border-white/10"
+                >
+                  Upgrade Plan
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Card: Prompt Quality */}
+          <div className="bg-[#1a1a1c] border border-white/[0.04] rounded-2xl p-6 flex flex-col justify-between">
             <div>
-              <div className="text-2xl font-bold text-white">0</div>
-              <div className="text-xs text-zinc-400 mt-1">Tokens Saved</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-white">--</div>
-              <div className="text-xs text-zinc-400 mt-1">Most Used Mode</div>
+              <div className="flex justify-between items-start mb-4">
+                <span className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Avg Prompt Quality</span>
+                <div className="size-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                  <Star size={16} className="text-emerald-400 fill-emerald-400/20" />
+                </div>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-4xl font-bold tracking-tight text-white">92</span>
+                <span className="text-xl font-bold tracking-tight text-zinc-600">/100</span>
+              </div>
+              <p className="text-sm text-emerald-400/80 mt-2 flex items-center gap-1.5">
+                <ArrowRight size={14} className="-rotate-45" />
+                +4% this week
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Top Cards */}
-        <div className="grid md:grid-cols-2 gap-6 mb-8">
+        {/* Middle Row: Recent Optimizations, Usage Chart */}
+        <div className="grid md:grid-cols-3 gap-6 mb-8">
           
-          {/* Card 1: Contexts */}
+          {/* Usage Chart Placeholder */}
+          <div className="md:col-span-1 bg-[#1a1a1c] border border-white/[0.04] rounded-2xl p-6 flex flex-col h-[400px]">
+             <div className="flex justify-between items-center mb-6">
+              <h2 className="text-sm font-semibold tracking-wide text-zinc-300">Usage History</h2>
+              <div className="text-xs text-zinc-500">Coming soon</div>
+            </div>
+            <div className="flex-1 rounded-xl bg-white/[0.02] border border-white/[0.02] flex items-center justify-center">
+               <div className="flex flex-col items-center gap-3 text-zinc-500">
+                 <BarChart2 size={32} className="opacity-50" />
+                 <span className="text-sm">Chart data unavailable</span>
+               </div>
+            </div>
+          </div>
+
+          {/* Recent Optimizations */}
+          <div className="md:col-span-2 bg-[#1a1a1c] border border-white/[0.04] rounded-2xl overflow-hidden flex flex-col h-[400px]">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-white/[0.04] shrink-0">
+              <h2 className="text-lg font-semibold text-white tracking-tight">Recent Optimizations</h2>
+              <Link href="/history" className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
+                View All <ArrowRight size={12} />
+              </Link>
+            </div>
+            
+            <div className="flex flex-col overflow-y-auto" ref={menuRef}>
+              {/* Copy toast */}
+              <AnimatePresence>
+                {copied && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                    className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-zinc-800 border border-white/10 text-white text-xs font-medium px-4 py-2 rounded-full shadow-xl"
+                  >
+                    ✓ {copied} copied
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {recentPrompts.length === 0 ? (
+                <div className="px-6 py-12 flex flex-col items-center justify-center text-center gap-4 my-auto">
+                  <div className="size-12 rounded-full bg-promptly-surface border border-promptly-border flex items-center justify-center relative shadow-[0_0_20px_rgba(139,108,255,0.15)]">
+                    <Bot size={20} className="text-promptly-violet" />
+                  </div>
+                  <div>
+                    <h3 className="text-zinc-200 font-medium text-sm mb-1">No prompts yet</h3>
+                    <p className="text-zinc-500 text-xs max-w-[250px]">Optimize a prompt in the extension to see it here.</p>
+                  </div>
+                </div>
+              ) : (
+                recentPrompts.map((prompt, idx) => (
+                <div 
+                  key={prompt.id} 
+                  className={`px-6 py-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors ${idx !== recentPrompts.length - 1 ? 'border-b border-white/[0.04]' : ''}`}
+                >
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div className="size-8 rounded-lg bg-[#242427] border border-white/[0.04] flex items-center justify-center shrink-0">
+                      {getPlatformIcon(prompt.platformUsed)}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-medium text-white truncate max-w-[150px] sm:max-w-[250px]">
+                        {prompt.originalPrompt || "Optimization"}
+                      </h3>
+                      <p className="text-[10px] text-zinc-500 mt-0.5">
+                        {new Date(prompt.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-4 shrink-0">
+                    <div className="text-right hidden sm:block">
+                      <p className="text-xs font-medium text-zinc-300">{prompt.responseTime ? `${(prompt.responseTime * 1000).toFixed(0)}ms` : '--'}</p>
+                    </div>
+                    
+                    {/* Three-dot menu */}
+                    <div className="relative">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === prompt.id ? null : prompt.id) }}
+                        className="text-zinc-500 hover:text-white transition-colors p-1.5 rounded-md hover:bg-white/10"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                          <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
+                        </svg>
+                      </button>
+
+                      <AnimatePresence>
+                        {activeMenu === prompt.id && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: -4 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: -4 }} transition={{ duration: 0.12 }}
+                            className="absolute right-0 top-8 z-50 w-48 bg-[#1e1e20] border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <button onClick={() => handleCopy(prompt.originalPrompt || '', 'Original')} className="w-full flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-white/[0.05] hover:text-white transition-colors text-left">
+                              <Copy size={13} className="text-zinc-500" /> Copy original
+                            </button>
+                            <button onClick={() => handleCopy(prompt.optimizedPrompt || '', 'Optimized')} className="w-full flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-white/[0.05] hover:text-white transition-colors text-left">
+                              <Copy size={13} className="text-zinc-500" /> Copy optimized
+                            </button>
+                            <div className="h-px bg-white/[0.05] mx-2 my-1" />
+                            <button onClick={() => handleDelete(prompt.id)} className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors text-left">
+                              <Trash2 size={13} /> Delete
+                            </button>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  </div>
+                </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom Row: Saved Profiles, History */}
+        <div className="grid md:grid-cols-2 gap-6">
+          
+          {/* Card: Saved Profiles */}
           <div className="bg-[#1a1a1c] border border-white/[0.04] rounded-2xl p-6 flex flex-col justify-between">
             <div>
               <div className="flex justify-between items-start mb-4">
                 <span className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Active Contexts</span>
                 <div className="size-8 rounded-lg bg-white/5 border border-white/5 flex items-center justify-center">
-                  <BarChart2 size={16} className="text-zinc-400" />
+                  <Globe size={16} className="text-indigo-400" />
                 </div>
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-5xl font-bold tracking-tight text-white">{contextsCount}</span>
-                <span className="text-2xl font-bold tracking-tight text-zinc-600">/{ctxMax}</span>
+                <span className="text-4xl font-bold tracking-tight text-white">{contextsCount}</span>
+                <span className="text-xl font-bold tracking-tight text-zinc-600">/{ctxMax}</span>
               </div>
+              <p className="text-sm text-zinc-400 mt-2">
+                Context profiles currently synced to the extension.
+              </p>
             </div>
             
             <div className="mt-8">
@@ -277,213 +468,33 @@ export default function DashboardPage() {
                 <span>{ctxPercent}%</span>
               </div>
               <div className="h-1.5 bg-black/40 rounded-full overflow-hidden">
-                <div className="h-full bg-[#8ba3f8] rounded-full transition-all duration-700" style={{ width: `${ctxPercent}%` }} />
+                <div className="h-full bg-indigo-500 rounded-full transition-all duration-700" style={{ width: `${ctxPercent}%` }} />
               </div>
             </div>
           </div>
 
-          {/* Card 2: Subscription */}
-          <div className="bg-[#1a1a1c] border border-white/[0.04] rounded-2xl p-6 flex flex-col justify-between">
-            <div>
-              <div className="flex justify-between items-start mb-4">
-                <span className="text-[11px] font-semibold uppercase tracking-widest text-zinc-500">Current Subscription</span>
-                <div className="size-8 rounded-lg bg-white/5 border border-white/5 flex items-center justify-center">
-                  <Cpu size={16} className="text-purple-400" />
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <span className="text-4xl font-bold tracking-tight text-white capitalize">{tier} Plan</span>
-                {tier !== 'expert' && (
-                  <button
-                    onClick={() => setShowUpgradeModal(true)}
-                    className="px-4 py-1.5 bg-[#2dd4bf] text-black font-semibold rounded-full text-sm hover:bg-[#2dd4bf]/90 transition-colors shadow-[0_0_15px_rgba(45,212,191,0.2)]"
-                  >
-                    Upgrade
-                  </button>
-                )}
-              </div>
-              <p className="text-sm text-zinc-400 mt-3">
-                {tier === 'expert' ? (
-                  "Unlimited optimizations remaining today."
-                ) : (
-                  `${optLeft} of ${optMax} optimizations remaining today.`
-                )}
-              </p>
-            </div>
-          </div>
-
-        </div>
-
-        {/* List Section */}
-        <div className="bg-[#1a1a1c] border border-white/[0.04] rounded-2xl overflow-hidden mb-8">
-          <div className="flex items-center justify-between px-6 py-5 border-b border-white/[0.04]">
-            <h2 className="text-lg font-semibold text-white tracking-tight">Recent Optimizations</h2>
-            <Link href="/history" className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 hover:text-white flex items-center gap-1 transition-colors">
-              View All <ArrowRight size={12} />
-            </Link>
-          </div>
-          
-          <div className="flex flex-col" ref={menuRef}>
-            {/* Copy toast */}
-            <AnimatePresence>
-              {copied && (
-                <motion.div
-                  initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                  className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-zinc-800 border border-white/10 text-white text-xs font-medium px-4 py-2 rounded-full shadow-xl"
-                >
-                  ✓ {copied} copied
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {recentPrompts.length === 0 ? (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="px-6 py-12 flex flex-col items-center justify-center text-center gap-4"
-              >
-                <div className="size-16 rounded-full bg-promptly-surface border border-promptly-border flex items-center justify-center relative shadow-[0_0_20px_rgba(139,108,255,0.15)]">
-                  <Bot size={28} className="text-promptly-violet" />
-                  <motion.div 
-                    className="absolute inset-0 rounded-full border border-promptly-cyan/30"
-                    animate={{ scale: [1, 1.2, 1], opacity: [0.5, 0, 0.5] }}
-                    transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                  />
-                </div>
-                <div>
-                  <h3 className="text-zinc-200 font-medium text-base mb-1">✨ Start optimizing prompts</h3>
-                  <p className="text-zinc-500 text-sm max-w-sm">Your prompt history will appear here. Try optimizing a prompt in the extension to see it live.</p>
-                </div>
-              </motion.div>
-            ) : (
-              recentPrompts.map((prompt, idx) => (
-              <motion.div 
-                key={prompt.id} 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(idx * 0.05, 0.5), duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-                className={`px-6 py-5 flex items-center justify-between hover:bg-promptly-surface hover:scale-[1.005] transition-all duration-300 ${idx !== recentPrompts.length - 1 ? 'border-b border-promptly-border' : ''}`}
-              >
-                <div className="flex items-center gap-4">
-                  <div className="size-10 rounded-xl bg-[#242427] border border-white/[0.04] flex items-center justify-center shrink-0">
-                    {getPlatformIcon(prompt.platformUsed)}
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-white truncate max-w-[200px] md:max-w-md">
-                      {prompt.originalPrompt || "Prompt Optimization"}
-                    </h3>
-                    <p className="text-[11px] text-zinc-500 font-mono mt-1">
-                      Platform: {prompt.platformUsed || 'Unknown'} • {new Date(prompt.createdAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-8">
-                  {prompt.isStarred ? (
-                    <div className="hidden md:flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
-                      <span className="text-amber-400">★</span>
-                      <span className="text-[11px] font-medium text-amber-300">Starred — Saved</span>
-                    </div>
-                  ) : (
-                    <div className="hidden md:flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/[0.03] border border-white/[0.05]">
-                      <span className="size-1.5 rounded-full bg-emerald-500" />
-                      <span className="text-[11px] font-medium text-zinc-300">Today only</span>
-                    </div>
-                  )}
-                  
-                  <div className="text-right hidden sm:block w-20">
-                    <p className="text-xs font-semibold text-white">{prompt.responseTime ? `${(prompt.responseTime * 1000).toFixed(0)}ms` : '--'}</p>
-                    <p className="text-[10px] text-zinc-500 uppercase tracking-wider mt-0.5">Latency</p>
-                  </div>
-                  
-                  {/* Three-dot menu */}
-                  <div className="relative">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === prompt.id ? null : prompt.id) }}
-                      className="text-zinc-600 hover:text-promptly-cyan transition-colors p-1 rounded-lg hover:bg-white/[0.05]"
-                      aria-label="More options"
-                    >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                        <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
-                      </svg>
-                    </button>
-
-                    <AnimatePresence>
-                      {activeMenu === prompt.id && (
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.95, y: -4 }}
-                          animate={{ opacity: 1, scale: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.95, y: -4 }}
-                          transition={{ duration: 0.12 }}
-                          className="absolute right-0 top-9 z-50 w-52 bg-[#1e1e20] border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden"
-                          onClick={e => e.stopPropagation()}
-                        >
-                          <button onClick={() => handleCopy(prompt.originalPrompt || '', 'Original')} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-300 hover:bg-white/[0.05] hover:text-white transition-colors text-left">
-                            <Copy size={13} className="text-zinc-500" /> Copy original
-                          </button>
-                          <button onClick={() => handleCopy(prompt.optimizedPrompt || '', 'Optimized')} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-300 hover:bg-white/[0.05] hover:text-white transition-colors text-left">
-                            <Copy size={13} className="text-zinc-500" /> Copy optimized
-                          </button>
-                          <div className="h-px bg-white/[0.05] mx-2" />
-                          <button onClick={() => handleStar(prompt.id, prompt.isStarred)} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-300 hover:bg-white/[0.05] hover:text-white transition-colors text-left">
-                            <Star size={13} className={prompt.isStarred ? 'text-amber-400 fill-amber-400' : 'text-zinc-500'} />
-                            {prompt.isStarred ? 'Unstar' : 'Star & save'}
-                          </button>
-                          <div className="h-px bg-white/[0.05] mx-2" />
-                          <button onClick={() => handleDelete(prompt.id)} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors text-left">
-                            <Trash2 size={13} /> Delete
-                          </button>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                </div>
-              </motion.div>
-              ))
-            )}
+          {/* Card: Quick Setup Guide */}
+          <div className="bg-[#1a1a1c] border border-white/[0.04] rounded-2xl p-6 flex flex-col justify-center">
+             <div className="flex items-center gap-4 mb-4">
+               <div className="size-10 rounded-xl bg-purple-500/10 flex items-center justify-center border border-purple-500/20">
+                 <Cpu className="text-purple-400" size={20} />
+               </div>
+               <div>
+                 <h2 className="text-base font-semibold text-white tracking-tight">System Status</h2>
+                 <p className="text-xs text-zinc-400">All systems operational.</p>
+               </div>
+             </div>
+             <p className="text-sm text-zinc-400 leading-relaxed mb-6">
+               Your extension is connected and ready. Highlight text on any page and click the Promptly orb to rewrite your prompt instantly.
+             </p>
+             <Link 
+               href="/settings"
+               className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-white font-medium rounded-lg text-sm transition-colors border border-white/10"
+             >
+               Manage Settings <ArrowRight size={14} />
+             </Link>
           </div>
         </div>
-
-        {/* Quick Start Guide */}
-        <div className="bg-[#1a1a1c] border border-white/[0.04] rounded-2xl overflow-hidden p-8">
-          <div className="flex flex-col gap-2 mb-6">
-            <h2 className="text-xl font-semibold text-white tracking-tight">Quick Start Guide</h2>
-            <p className="text-sm text-zinc-400">Master Promptly in 60 seconds and start writing perfect prompts effortlessly.</p>
-          </div>
-          
-          <div className="grid md:grid-cols-3 gap-6">
-            <div className="flex flex-col gap-3 p-5 rounded-xl bg-white/[0.02] border border-white/[0.03]">
-              <div className="size-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400 mb-2">
-                1
-              </div>
-              <h3 className="font-semibold text-zinc-200">The Floating Orb</h3>
-              <p className="text-xs text-zinc-400 leading-relaxed">
-                Click the Promptly orb on ChatGPT or Claude to instantly optimize the prompt you're currently writing. You can also drag the orb anywhere on the screen.
-              </p>
-            </div>
-            
-            <div className="flex flex-col gap-3 p-5 rounded-xl bg-white/[0.02] border border-white/[0.03]">
-              <div className="size-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-400 mb-2">
-                2
-              </div>
-              <h3 className="font-semibold text-zinc-200">Auto-Optimize Shortcut</h3>
-              <p className="text-xs text-zinc-400 leading-relaxed">
-                <strong className="text-white">Double-click</strong> the orb, or press <kbd className="px-1.5 py-0.5 rounded bg-white/10 text-[10px] font-mono border border-white/20 mx-1">Ctrl+Shift+P</kbd> to automatically optimize and insert your prompt without opening the panel.
-              </p>
-            </div>
-            
-            <div className="flex flex-col gap-3 p-5 rounded-xl bg-white/[0.02] border border-white/[0.03]">
-              <div className="size-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400 mb-2">
-                3
-              </div>
-              <h3 className="font-semibold text-zinc-200">Context Memory</h3>
-              <p className="text-xs text-zinc-400 leading-relaxed">
-                Head over to the extension settings to define your default <strong className="text-white">Context Profile</strong>. Promptly will inject this context seamlessly into every prompt you write.
-              </p>
-            </div>
-          </div>
-        </div>
-
       </div>
       
       {/* Upgrade Modal */}

@@ -1,10 +1,37 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { Ratelimit } from '@upstash/ratelimit';
+import { Redis } from '@upstash/redis';
 
-// Basic in-memory rate limiter for Edge/Serverless environments
+// Strict environment matrix per audit feedback
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+    throw new Error('FATAL: UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN must be defined in production. Missing queue configuration.');
+  }
+}
+
+let ratelimit: Ratelimit | null = null;
+if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+  ratelimit = new Ratelimit({
+    redis: Redis.fromEnv(),
+    limiter: Ratelimit.slidingWindow(30, '1 m'),
+    analytics: true,
+  });
+}
+
+// Basic in-memory rate limiter for dev fallback
 const rateLimitMap = new Map<string, { count: number, resetTime: number }>();
 
-function checkRateLimit(ip: string): boolean {
+async function checkRateLimit(ip: string): Promise<boolean> {
+  if (ratelimit) {
+    try {
+      const { success } = await ratelimit.limit(ip);
+      return success;
+    } catch (e) {
+      console.warn('Upstash rate limit error, falling back to memory', e);
+    }
+  }
+
   const now = Date.now();
   const windowMs = 60 * 1000; // 1 minute
   const maxRequests = 30;     // 30 requests per minute
@@ -23,27 +50,32 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
-export function middleware(request: NextRequest) {
+export default async function proxy(request: NextRequest) {
   // Only apply to /api/* routes
   if (!request.nextUrl.pathname.startsWith('/api/')) {
     return NextResponse.next();
   }
 
   // Rate Limiting
-  const ip = request.headers.get('x-forwarded-for') || request.ip || '127.0.0.1';
-  if (!checkRateLimit(ip)) {
+  const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '127.0.0.1';
+  if (!(await checkRateLimit(ip))) {
     return new NextResponse(JSON.stringify({ error: "Too Many Requests" }), { 
       status: 429,
       headers: { 'Content-Type': 'application/json' }
     });
   }
 
-  const origin = request.headers.get('origin') || '';
+  const ALLOWED_ORIGINS = new Set([
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'https://proenpt.vercel.app',
+    'https://proenpt.com',
+    'https://app.proenpt.com',
+  ]);
   
-  // The API is consumed by a Chrome extension content script which can be injected 
-  // into any webpage (chatgpt.com, claude.ai, etc.). Thus, we must allow any origin.
-  // Using 'null' instead of '*' satisfies the spec when Credentials are true.
-  const allowedOrigin = origin || 'null';
+  const allowedOrigin = ALLOWED_ORIGINS.has(origin) || origin.startsWith('chrome-extension://')
+    ? origin
+    : 'null';
 
   // FIX 1.3: Only allow private network access for localhost dev origins.
   // Sending Access-Control-Allow-Private-Network: true for public domains lets

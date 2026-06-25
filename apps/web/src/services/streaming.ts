@@ -1,21 +1,41 @@
-export function createOpenAIStream(response: Response) {
+import { SupabaseClient } from '@supabase/supabase-js';
+
+interface StreamContext {
+  user: { id: string };
+  body: {
+    text: string;
+    mode: string;
+    level: string;
+    platform?: string;
+  };
+  platform: string;
+  supabase: SupabaseClient;
+}
+
+/**
+ * Converts a raw Gemini SSE response into an OpenAI-compatible SSE stream.
+ * On stream completion (flush), persists the full optimized text to PromptHistory
+ * so history is always recorded server-side regardless of extension state.
+ */
+export function createOpenAIStream(response: Response, context?: StreamContext) {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
   let accumulatedText = "";
   let buffer = "";
-  
+  const startTime = Date.now();
+
   const transformStream = new TransformStream({
     async transform(chunk, controller) {
       const text = decoder.decode(chunk, { stream: true });
       buffer += text;
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? "";
-      
+
       for (const line of lines) {
         if (line.startsWith('data: ')) {
           const dataStr = line.slice(6);
-          if (dataStr === '[DONE]') continue;
-          
+          if (dataStr.trim() === '[DONE]') continue;
+
           try {
             const data = JSON.parse(dataStr);
             if (data.error) {
@@ -31,9 +51,7 @@ export function createOpenAIStream(response: Response) {
               const content = data.candidates[0].content.parts[0].text;
               accumulatedText += content;
               const openAIChunk = {
-                choices: [{
-                  delta: { content }
-                }]
+                choices: [{ delta: { content } }]
               };
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(openAIChunk)}\n\n`));
             }
@@ -43,8 +61,28 @@ export function createOpenAIStream(response: Response) {
         }
       }
     },
+
     async flush() {
-      // Stream is complete
+      // Stream complete — persist to PromptHistory server-side.
+      // This is the only reliable place: the extension may disconnect, crash,
+      // or switch tabs before it can POST to /api/history itself.
+      if (context && accumulatedText.trim()) {
+        const responseTime = (Date.now() - startTime) / 1000;
+        try {
+          await context.supabase.from('PromptHistory').insert([{
+            userId: context.user.id,
+            originalPrompt: context.body.text,
+            optimizedPrompt: accumulatedText.trim(),
+            platformUsed: context.platform || context.body.platform || 'api',
+            promptMode: context.body.mode?.toUpperCase() ?? 'GENERAL',
+            rewriteLevel: context.body.level?.toUpperCase() ?? 'MEDIUM',
+            responseTime,
+          }]);
+        } catch (e) {
+          // Non-fatal — history write failure should not break the stream response
+          console.error('[Promptly] Failed to write PromptHistory on stream flush:', e);
+        }
+      }
     }
   });
 

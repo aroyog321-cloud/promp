@@ -12,7 +12,7 @@ export function GlobalAuthSync() {
   useEffect(() => {
     setMounted(true)
     const supabase = createClient()
-    
+
     // Get initial session
     supabase.auth.getSession().then(({ data }) => {
       if (data.session?.access_token) {
@@ -20,13 +20,24 @@ export function GlobalAuthSync() {
       }
     })
 
-    // Listen for auth changes (login/logout)
+    // Listen for auth changes (login/logout/token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setToken(session?.access_token || null)
     })
 
+    // Proactively refresh the session every 45 minutes.
+    // Supabase JWTs expire after 1 hour. Without this, the extension receives a
+    // 401 roughly 60 minutes after login with no visible error to the user.
+    const refreshInterval = setInterval(async () => {
+      const { data, error } = await supabase.auth.refreshSession()
+      if (!error && data.session?.access_token) {
+        setToken(data.session.access_token)
+      }
+    }, 45 * 60 * 1000) // 45 minutes
+
     return () => {
       subscription.unsubscribe()
+      clearInterval(refreshInterval)
     }
   }, [])
 

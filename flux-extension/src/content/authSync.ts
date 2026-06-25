@@ -1,6 +1,11 @@
 // flux-extension/src/content/authSync.ts
 const STORAGE_KEY = "promptly_settings_v1";
 
+// Nonce store: rejects replayed auth token messages within the 30s validity window.
+// Using a bounded Set; entries are never removed (nonces are one-time-use by definition).
+// In practice this only ever holds a handful of entries per page load.
+const seenNonces = new Set<string>();
+
 function parseJwt(token: string) {
   try {
     const base64Url = token.split('.')[1];
@@ -36,6 +41,9 @@ async function saveToken(token: string, apiBaseUrl: string) {
 
     // Tell background script to trigger a drain on active extension tabs
     chrome.runtime.sendMessage({ type: "PROMPTLY_TOKEN_SAVED_DRAIN_HISTORY" }).catch(() => {});
+    
+    // Stop announcing since we got the token
+    if (typeof announceInterval !== "undefined") clearInterval(announceInterval);
   } catch (e) {
     console.warn("[Promptly] Extension context invalidated during auth sync", e);
   }
@@ -51,7 +59,7 @@ let announceCount = 0;
 const announceInterval = setInterval(() => {
   announceCount++;
   announce();
-  if (announceCount >= 15) clearInterval(announceInterval);
+  if (announceCount >= 10) clearInterval(announceInterval);
 }, 2000);
 
 window.addEventListener("message", async (event) => {
@@ -79,6 +87,20 @@ window.addEventListener("message", async (event) => {
       console.warn("[Promptly] Ignored PROMPTLY_AUTH_TOKEN from non-window source (possible iframe injection).");
       return;
     }
+    
+    // Check for replay attacks:
+    // 1. Timestamp must be within 30 seconds
+    if (!data.timestamp || Date.now() - data.timestamp > 30000) {
+      console.warn("[Promptly] Ignored PROMPTLY_AUTH_TOKEN due to missing or expired timestamp.");
+      return;
+    }
+    // 2. Nonce must be present and must not have been seen before (replay prevention)
+    if (!data.nonce || seenNonces.has(data.nonce)) {
+      console.warn("[Promptly] Ignored PROMPTLY_AUTH_TOKEN: missing or replayed nonce.");
+      return;
+    }
+    seenNonces.add(data.nonce);
+    
     await saveToken(data.token, window.location.origin);
   } else if (data.type === "PROMPTLY_LOGOUT") {
     try {

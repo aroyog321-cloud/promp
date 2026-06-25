@@ -31,7 +31,9 @@ export default function SettingsPage() {
   // it to chrome.storage.local, then replies with PROMPTLY_AUTH_SYNCED.
   const syncTokenToExtension = (accessToken: string) => {
     setSyncStatus('syncing')
-    window.postMessage({ type: 'PROMPTLY_AUTH_TOKEN', token: accessToken }, window.location.origin)
+    const timestamp = Date.now();
+    const nonce = Math.random().toString(36).substring(2) + timestamp.toString(36);
+    window.postMessage({ type: 'PROMPTLY_AUTH_TOKEN', token: accessToken, timestamp, nonce }, window.location.origin)
 
     // Give the extension 3 seconds to acknowledge
     if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current)
