@@ -201,7 +201,7 @@ export async function optimizePrompt(
         const platform = SAFE_PLATFORMS.includes(rawPlatform) ? rawPlatform : 'web';
         const systemPrompt = await buildSystemPrompt(req.mode, req.level, platform);
         const userPrompt = buildUserPrompt(req);
-        const isTwoPass = req.level === "aggressive" || req.level === "expert";
+        const isTwoPass = req.level === "Staff+" || req.level === "Research" || req.level === "Production Audit";
 
         if (isTwoPass) {
           // Pass 1: Draft (no stream)
@@ -236,7 +236,7 @@ RUBRIC:
   Fix: "Do NOT use passive voice or exceed 300 words."
 - OUTPUT FORMAT: Must specify exact structure, sections, and length.
 - SUCCESS CRITERIA: Must define what a high-quality output looks like to a skeptic.
-${req.level === "expert" ? "- EDGE CASES: Must explicitly name 2-3 likely failure modes for the model to watch out for." : ""}
+${req.level === "Research" || req.level === "Production Audit" ? "- EDGE CASES: Must explicitly name 2-3 likely failure modes for the model to watch out for." : ""}
 
 DRAFT:
 ${draftText}`;

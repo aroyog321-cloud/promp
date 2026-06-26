@@ -97,12 +97,12 @@ export async function POST(request: Request) {
       MEDIUM: "MEDIUM",
       AGGRESSIVE: "AGGRESSIVE",
       EXPERT: "EXPERT",
-      // Legacy to New mappings
-      BASIC: "LIGHT",
-      PROFESSIONAL: "MEDIUM",
-      "STAFF+": "AGGRESSIVE",
-      RESEARCH: "EXPERT",
-      "PRODUCTION AUDIT": "EXPERT"
+      // FIX #2: Map to proper new enum values, matching the updated SQL migration
+      BASIC: "BASIC",
+      PROFESSIONAL: "PROFESSIONAL",
+      "STAFF+": "STAFF_PLUS",
+      RESEARCH: "RESEARCH",
+      "PRODUCTION AUDIT": "PRODUCTION_AUDIT"
     };
 
     const rawMode = (body.promptMode || body.mode || "").toString().replace(/-/g, "_").toUpperCase();

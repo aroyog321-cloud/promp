@@ -55,7 +55,7 @@ export function createOpenAIStream(response: Response, context?: StreamContext) 
               };
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(openAIChunk)}\n\n`));
             }
-          } catch (e) {
+          } catch {
             // Ignore parse errors for incomplete chunks
           }
         }
@@ -68,6 +68,13 @@ export function createOpenAIStream(response: Response, context?: StreamContext) 
       // or switch tabs before it can POST to /api/history itself.
       if (context && accumulatedText.trim()) {
         const responseTime = (Date.now() - startTime) / 1000;
+        const rawLevel = context.body.level?.toUpperCase() ?? 'MEDIUM';
+        const LEVEL_MAP: Record<string, string> = {
+          'LIGHT': 'LIGHT', 'MEDIUM': 'MEDIUM', 'AGGRESSIVE': 'AGGRESSIVE', 'EXPERT': 'EXPERT',
+          'BASIC': 'BASIC', 'PROFESSIONAL': 'PROFESSIONAL', 'STAFF+': 'STAFF_PLUS', 'RESEARCH': 'RESEARCH', 'PRODUCTION AUDIT': 'PRODUCTION_AUDIT'
+        };
+        const mappedLevel = LEVEL_MAP[rawLevel] || 'MEDIUM';
+
         try {
           await context.supabase.from('PromptHistory').insert([{
             userId: context.user.id,
@@ -75,7 +82,7 @@ export function createOpenAIStream(response: Response, context?: StreamContext) 
             optimizedPrompt: accumulatedText.trim(),
             platformUsed: context.platform || context.body.platform || 'api',
             promptMode: context.body.mode?.toUpperCase() ?? 'GENERAL',
-            rewriteLevel: context.body.level?.toUpperCase() ?? 'MEDIUM',
+            rewriteLevel: mappedLevel,
             responseTime,
           }]);
         } catch (e) {

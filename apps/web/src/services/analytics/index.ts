@@ -1,4 +1,4 @@
-export const sanitizeAnalytics = (properties: Record<string, any>) => {
+export const sanitizeAnalytics = (properties: Record<string, unknown>) => {
   const sanitized = { ...properties };
   const sensitiveKeys = ['prompt', 'optimized', 'apikey', 'token', 'email'];
   
@@ -10,7 +10,7 @@ export const sanitizeAnalytics = (properties: Record<string, any>) => {
   return sanitized;
 };
 
-export const trackEvent = (eventName: string, properties?: Record<string, any>) => {
+export const trackEvent = (eventName: string, properties?: Record<string, unknown>) => {
   const safeProperties = properties ? sanitizeAnalytics(properties) : {};
   
   if (process.env.NEXT_PUBLIC_POSTHOG_ENABLED === 'true') {

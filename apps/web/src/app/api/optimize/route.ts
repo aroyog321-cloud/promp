@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import type { OptimizeRequest, OptimizeResponse } from '@promptly/types';
+import type { OptimizeResponse, PromptMode } from '@promptly/types';
 import { buildSystemPrompt, buildUserPrompt, localOptimize } from '@promptly/prompt-engine';
 
 import { requireEnv } from '@/lib/env';
@@ -24,13 +24,9 @@ export const POST = withMetrics(async (request: Request) => {
   try {
     routeTimeout = setTimeout(() => routeController.abort(), 50000); // 50s route timeout
 
-    const MAX_BYTES = Number(process.env.MAX_OPTIMIZE_REQUEST_BYTES ?? 65536);
-    const size = Number(request.headers.get("content-length") ?? 0);
-    
-    if (!Number.isFinite(size) || size > MAX_BYTES) {
-      return NextResponse.json({ error: "Payload too large" }, { status: 413 });
-    }
-
+    // FIX #4: Actual body-size enforcement is now done in validateOptimizeRequest
+    // using the real decoded byte length. The Content-Length header is attacker-controlled
+    // and is no longer used as a security gate here.
     const bodyText = await request.text();
     const validation = validateOptimizeRequest(bodyText);
     
@@ -52,7 +48,7 @@ export const POST = withMetrics(async (request: Request) => {
     // Parallelize independent remote calls
     const billingPromise = checkQuotaAndTier(supabaseUserClient, user.id, isRegeneration, hasContextMemory);
     const apiKeyPromise = getDynamicApiKey(supabaseAdmin, GEMINI_API_KEY);
-    let classifyPromise: Promise<any> | null = null;
+    let classifyPromise: Promise<string | null> | null = null;
     
     if (body.mode === "auto") {
       // Use fallback key for classification to parallelize
@@ -68,7 +64,7 @@ export const POST = withMetrics(async (request: Request) => {
     if (billingResult.error) {
       return NextResponse.json({ error: billingResult.error }, { status: billingResult.status });
     }
-    const tier = billingResult.tier || 'free';
+    // tier variable removed as it was unused
     const FINAL_API_KEY = dynamicApiKey || GEMINI_API_KEY;
 
     if (!FINAL_API_KEY) {
@@ -93,7 +89,7 @@ export const POST = withMetrics(async (request: Request) => {
     const isTrustedOrigin = rawOrigin.startsWith("chrome-extension://") || ALLOWED_ORIGINS.includes(rawOrigin);
     const platform = isTrustedOrigin ? rawOrigin : undefined;
 
-    const resolvedMode = classifiedMode ? classifiedMode : body.mode;
+    const resolvedMode = (classifiedMode ? classifiedMode : body.mode) as PromptMode;
 
     const systemPrompt = await buildSystemPrompt(resolvedMode, body.level, platform);
     const userPrompt = buildUserPrompt(body);
@@ -121,11 +117,13 @@ export const POST = withMetrics(async (request: Request) => {
 
       const responseTime = (Date.now() - startTime) / 1000;
 
+      // FIX #1: Await saveHistory so failures are surfaced and logged,
+      // rather than silently dropped after the response is already sent.
       const saveHistory = async () => {
         const rawLevel = body.level?.toUpperCase() ?? 'MEDIUM';
         const LEVEL_MAP: Record<string, string> = {
           'LIGHT': 'LIGHT', 'MEDIUM': 'MEDIUM', 'AGGRESSIVE': 'AGGRESSIVE', 'EXPERT': 'EXPERT',
-          'BASIC': 'LIGHT', 'PROFESSIONAL': 'MEDIUM', 'STAFF+': 'AGGRESSIVE', 'RESEARCH': 'EXPERT', 'PRODUCTION AUDIT': 'EXPERT'
+          'BASIC': 'BASIC', 'PROFESSIONAL': 'PROFESSIONAL', 'STAFF+': 'STAFF_PLUS', 'RESEARCH': 'RESEARCH', 'PRODUCTION AUDIT': 'PRODUCTION_AUDIT'
         };
         const mappedLevel = LEVEL_MAP[rawLevel] || 'MEDIUM';
 
@@ -139,10 +137,13 @@ export const POST = withMetrics(async (request: Request) => {
           responseTime,
         }]).throwOnError();
       };
-      
-      saveHistory().catch(err => {
-        console.error('[Promptly] PromptHistory insert failed:', err.message || err);
-      });
+
+      try {
+        await saveHistory();
+      } catch (err) {
+        // Non-fatal: log the failure but still return the optimized result to the user.
+        console.error('[Promptly] PromptHistory insert failed:', err instanceof Error ? err.message : err);
+      }
 
       return NextResponse.json<OptimizeResponse>({
         optimized: optimizedText,
@@ -150,15 +151,16 @@ export const POST = withMetrics(async (request: Request) => {
       });
     }
 
-  } catch (error: any) {
+  } catch (error) {
     const duration = Date.now() - startTime;
+    const isError = error instanceof Error;
 
-    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+    if (isError && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
       captureError(error, { route: '/api/optimize', error: 'request_timeout', duration, provider: 'gemini', tier: 'unknown' });
       return NextResponse.json({ error: "request_timeout" }, { status: 504 });
     }
 
-    captureError(error, { route: '/api/optimize', duration, provider: 'gemini' });
+    captureError(isError ? error : new Error(String(error)), { route: '/api/optimize', duration, provider: 'gemini' });
 
     return NextResponse.json(
       { error: "Internal server error" },

@@ -7,7 +7,7 @@ export interface ErrorContext {
   tier?: string;
   provider?: string;
   mode?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export const captureError = (error: Error | unknown, context?: ErrorContext) => {

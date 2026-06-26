@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import type { User } from '@supabase/supabase-js'
 import { createClient } from '../../../lib/supabaseBrowser'
 
-import { User, Shield, LogOut, CheckCircle2, Clock, RefreshCw } from 'lucide-react'
+import { User as UserIcon, Shield, LogOut, CheckCircle2, Clock, RefreshCw } from 'lucide-react'
 
 const SettingsSkeleton = () => (
   <main className="min-h-[calc(100vh-73px)] pb-32 bg-[#09090b] text-white">
@@ -19,7 +20,7 @@ const SettingsSkeleton = () => (
 )
 
 export default function SettingsPage() {
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [token, setToken] = useState<string | null>(null)
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'connected' | 'no_extension'>('idle')
@@ -54,7 +55,7 @@ export default function SettingsPage() {
         } else {
           window.location.href = '/login'
         }
-      } catch (err) {
+      } catch {
         window.location.href = '/login'
       } finally {
         setLoading(false)
@@ -172,7 +173,7 @@ export default function SettingsPage() {
           <section className="bg-[#1a1a1c] border border-white/[0.04] p-6 md:p-8 rounded-2xl">
             <div className="flex items-center gap-3 mb-8">
               <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center border border-purple-500/20">
-                <User className="text-purple-400" size={20} />
+                <UserIcon className="text-purple-400" size={20} />
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-white tracking-tight">Profile Information</h2>

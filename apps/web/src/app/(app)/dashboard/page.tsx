@@ -33,28 +33,41 @@ const DashboardSkeleton = () => (
 )
 
 import { useRouter } from 'next/navigation'
+import type { User } from '@supabase/supabase-js'
 
 export default function DashboardPage() {
   const router = useRouter()
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [tier, setTier] = useState<'free' | 'pro' | 'expert'>('free')
-  const [token, setToken] = useState<string | null>(null)
+
   const [authError, setAuthError] = useState<string | null>(null)
   
-  const [stats, setStats] = useState<any>({
+  interface PromptHistoryItem {
+    id: string;
+    originalPrompt: string | null;
+    optimizedPrompt: string | null;
+    platformUsed: string;
+    promptMode: string | null;
+    isStarred: boolean;
+    responseTime: number | null;
+    createdAt: string;
+  }
+  
+  const [stats, setStats] = useState<{ total_requests_today: number; regenerations_today: number; tier?: string } | null>({
     total_requests_today: 0,
     regenerations_today: 0,
   })
   
   const [contextsCount, setContextsCount] = useState(0)
-  const [recentPrompts, setRecentPrompts] = useState<any[]>([])
+  const [recentPrompts, setRecentPrompts] = useState<Array<PromptHistoryItem>>([])
   const [activeMenu, setActiveMenu] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
-  const supabase = createClient()
+  // FIX #6 & #7: Stabilise supabase client reference so it doesn't trigger re-renders
+  const [supabase] = useState(() => createClient())
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -62,7 +75,7 @@ export default function DashboardPage() {
       const error = params.get('error')
       const errorDescription = params.get('error_description')
       if (error) {
-        setAuthError(`Authentication Failed: ${errorDescription || error}`)
+        setTimeout(() => setAuthError(`Authentication Failed: ${errorDescription || error}`), 0)
         setTimeout(() => router.push('/login'), 3000)
         return
       }
@@ -70,7 +83,7 @@ export default function DashboardPage() {
 
     async function loadData() {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
+        await supabase.auth.getSession()
         const { data: { user: currentUser }, error: userError } = await supabase.auth.getUser()
         
         if (userError || !currentUser) {
@@ -78,10 +91,9 @@ export default function DashboardPage() {
           return
         }
         
-        const isEmailConfirmed = !!currentUser.email_confirmed_at
+
         
         setUser(currentUser)
-        setToken(session?.access_token || null)
         
         // Load Usage Stats
         const { data: statsData, error: statsError } = await supabase
@@ -133,7 +145,7 @@ export default function DashboardPage() {
       }
     }
     loadData()
-  }, [])
+  }, [supabase, router])
 
   // Close menu on outside click
   useEffect(() => {
@@ -145,16 +157,18 @@ export default function DashboardPage() {
     return () => document.removeEventListener('mousedown', handler)
   }, [activeMenu])
 
-  const handleStar = async (id: string, current: boolean) => {
-    setRecentPrompts(prev => prev.map(p => p.id === id ? { ...p, isStarred: !current } : p))
-    await supabase.from('PromptHistory').update({ isStarred: !current }).eq('id', id)
-    setActiveMenu(null)
-  }
+
 
   const handleDelete = async (id: string) => {
+    // FIX #8: Optimistic update with error rollback
+    const backup = recentPrompts;
     setRecentPrompts(prev => prev.filter(p => p.id !== id))
-    await supabase.from('PromptHistory').delete().eq('id', id)
     setActiveMenu(null)
+    const { error } = await supabase.from('PromptHistory').delete().eq('id', id)
+    if (error) {
+      console.error("Failed to delete prompt:", error)
+      setRecentPrompts(backup) // rollback
+    }
   }
 
   const handleCopy = (text: string, label: string) => {
@@ -170,16 +184,16 @@ export default function DashboardPage() {
     const channel = supabase
       .channel('schema-db-changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'PromptHistory', filter: `userId=eq.${user.id}` }, (payload) => {
-        setRecentPrompts((prev: any[]) => [payload.new, ...prev].slice(0, 20));
+        setRecentPrompts((prev: PromptHistoryItem[]) => [payload.new as PromptHistoryItem, ...prev].slice(0, 20));
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ContextProfile', filter: `"userId"=eq.${user.id}` }, (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ContextProfile', filter: `"userId"=eq.${user.id}` }, (_payload) => {
         // Just reload contexts
         supabase.from('ContextProfile').select('*', { count: 'exact', head: true })
           .then(({ count }) => { if (count !== null) setContextsCount(count) });
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'usage_stats', filter: `id=eq.${user.id}` }, (payload) => {
         // Update limits inline
-        setStats((prev: any) => ({ ...prev, ...payload.new }));
+        setStats((prev) => prev ? { ...prev, ...(payload.new as Record<string, unknown>) } : { total_requests_today: 0, regenerations_today: 0, ...(payload.new as Record<string, unknown>) });
         window.postMessage({ type: "PROMPTLY_PLAN_UPDATED" }, window.location.origin);
       })
       .subscribe()
@@ -201,7 +215,7 @@ export default function DashboardPage() {
       supabase.removeChannel(channel)
       document.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [user])
+  }, [user, supabase])
 
   if (authError) {
     return (
@@ -217,7 +231,7 @@ export default function DashboardPage() {
   if (loading) return <DashboardSkeleton />
 
   const optMax = tier === 'free' ? 10 : tier === 'pro' ? 50 : 1000
-  const optUsed = stats.total_requests_today || 0
+  const optUsed = stats?.total_requests_today || 0
   const optLeft = Math.max(0, optMax - optUsed)
   const optPercent = Math.min(100, Math.round((optUsed / optMax) * 100))
 
@@ -316,12 +330,10 @@ export default function DashboardPage() {
                 </div>
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-4xl font-bold tracking-tight text-white">92</span>
-                <span className="text-xl font-bold tracking-tight text-zinc-600">/100</span>
+                <span className="text-4xl font-bold tracking-tight text-white">N/A</span>
               </div>
-              <p className="text-sm text-emerald-400/80 mt-2 flex items-center gap-1.5">
-                <ArrowRight size={14} className="-rotate-45" />
-                +4% this week
+              <p className="text-sm text-zinc-500 mt-2 flex items-center gap-1.5">
+                Coming soon
               </p>
             </div>
           </div>

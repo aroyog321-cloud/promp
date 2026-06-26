@@ -1,13 +1,13 @@
-import { NextResponse } from 'next/server';
+
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { captureError } from '@/services/monitoring';
 
-export function withMetrics(routeHandler: (request: Request, ...args: any[]) => Promise<Response>) {
-  return async (request: Request, ...args: any[]) => {
+export function withMetrics(routeHandler: (request: Request, ...args: unknown[]) => Promise<Response>) {
+  return async (request: Request, ...args: unknown[]) => {
     const startTime = Date.now();
     let status = 500;
     let provider = 'unknown';
-    let cacheStatus = 'MISS'; // Default assumption for dynamic API routes
+    const cacheStatus = 'MISS'; // Default assumption for dynamic API routes
 
     try {
       const response = await routeHandler(request, ...args);

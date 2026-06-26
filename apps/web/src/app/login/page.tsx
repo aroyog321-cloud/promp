@@ -1,8 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
-import Image from 'next/image'
 import { createClient } from '../../lib/supabaseBrowser'
 
 export default function LoginPage() {
@@ -12,21 +10,28 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [isError, setIsError] = useState(false)
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
 
   const supabase = createClient()
 
   const handleGoogleLogin = async () => {
+    if (!acceptedTerms) {
+      setMessage('You must accept the Terms of Service and Privacy Policy to continue.')
+      setIsError(true)
+      return
+    }
     try {
       setLoading(true)
       const { error } = await supabase.auth.signInWithOAuth({ 
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/dashboard`
+          redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`
         }
       })
       if (error) throw error
-    } catch (error: any) {
-      setMessage(error.message.includes('fetch') ? 'Network error. Please try again.' : error.message)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      setMessage(msg.includes('fetch') ? 'Network error. Please try again.' : msg)
       setIsError(true)
       setLoading(false)
     }
@@ -34,6 +39,13 @@ export default function LoginPage() {
 
   const handlePasswordAuth = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (!acceptedTerms) {
+      setMessage('You must accept the Terms of Service and Privacy Policy to continue.')
+      setIsError(true)
+      return
+    }
+
     setLoading(true)
     setMessage('')
     setIsError(false)
@@ -58,8 +70,9 @@ export default function LoginPage() {
         if (error) throw error
         window.location.href = '/dashboard'
       }
-    } catch (error: any) {
-      setMessage(error.message.includes('fetch') ? 'Network error. Please check your connection.' : error.message)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      setMessage(msg.includes('fetch') ? 'Network error. Please check your connection.' : msg)
       setIsError(true)
     } finally {
       setLoading(false)
@@ -75,7 +88,7 @@ export default function LoginPage() {
             
             <h1 className="text-2xl font-semibold mb-2 text-center text-white">{isSignUp ? 'Create an account' : 'Welcome back'}</h1>
             <p className="text-zinc-400 text-sm text-center mb-8">
-              {isSignUp ? 'Sign up to start optimizing prompts.' : 'Sign in to sync your extension.'}
+              {isSignUp ? 'Sign up to start optimizing prompts.' : 'Sign in to manage your account.'}
             </p>
             
             <button
@@ -153,10 +166,20 @@ export default function LoginPage() {
               </div>
             )}
           </div>
-          
-          <p className="text-center text-sm text-zinc-500 mt-8">
-            By signing in, you agree to our <a href="#" className="underline hover:text-zinc-300">Terms of Service</a> and <a href="#" className="underline hover:text-zinc-300">Privacy Policy</a>.
-          </p>
+          <div className="mt-8 flex items-start gap-3">
+            <div className="flex items-center h-5">
+              <input
+                id="terms"
+                type="checkbox"
+                checked={acceptedTerms}
+                onChange={(e) => setAcceptedTerms(e.target.checked)}
+                className="w-4 h-4 rounded border-white/20 bg-black/50 text-blue-600 focus:ring-blue-500/50 focus:ring-offset-0"
+              />
+            </div>
+            <label htmlFor="terms" className="text-sm text-zinc-400 leading-relaxed">
+              By checking this box and continuing, you agree to our <a href="/terms" className="text-white hover:underline font-medium">Terms of Service</a> and <a href="/privacy" className="text-white hover:underline font-medium">Privacy Policy</a>, and consent to the collection and use of your data as described.
+            </label>
+          </div>
         </div>
       </main>
     </div>

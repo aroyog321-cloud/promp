@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Check, Shield, ArrowRight } from 'lucide-react'
+import { X, Check, Shield, ArrowRight, Copy, CheckCircle } from 'lucide-react'
 
 interface UpgradeModalProps {
   isOpen: boolean
@@ -35,6 +35,16 @@ export default function UpgradeModal({ isOpen, onClose, user }: UpgradeModalProp
   const [selectedPlan, setSelectedPlan] = useState<'Pro' | 'Expert'>('Expert')
   const [selectedMethod, setSelectedMethod] = useState<string>('UPI')
   const [showEmailOptions, setShowEmailOptions] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = (method: string, plan: string) => {
+    const rawSubject = `${plan} Access Request — ${method}`
+    const shortId = user.id ? user.id.slice(0, 8) : 'unknown'
+    const rawBody = `To: aroyog321@gmail.com\nSubject: ${rawSubject}\n\nHello,\n\nI would like to request ${plan} access.\n\nPayment Method:\n${method}\n\nName:\n${user.name || 'Not provided'}\n\nEmail:\n${user.email || 'Not provided'}\n\nUser ID:\n${shortId}\n\nPlease share payment details.\n\nThank you.`
+    navigator.clipboard.writeText(rawBody)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   if (!isOpen) return null
 
@@ -65,7 +75,7 @@ Thank you.`
 
     const subject = encodeURIComponent(rawSubject)
     const body = encodeURIComponent(rawBody)
-    const to = 'upgrade@proenpt.com'
+    const to = 'aroyog321@gmail.com'
 
     return {
       gmail: `https://mail.google.com/mail/?view=cm&fs=1&to=${to}&su=${subject}&body=${body}`,
@@ -75,7 +85,6 @@ Thank you.`
   }
 
   function handleEmailClick(url: string) {
-    window.open(url, '_blank')
     setShowEmailOptions(false)
     onClose()
   }
@@ -226,25 +235,41 @@ Thank you.`
                   >
                     <p className="text-xs text-zinc-400 text-center mb-1">Send request via:</p>
                     <div className="grid grid-cols-2 gap-2">
-                      <button
-                        onClick={() => handleEmailClick(getEmailUrls(selectedMethod, selectedPlan).gmail)}
+                      <a
+                        href={getEmailUrls(selectedMethod, selectedPlan).gmail}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => handleEmailClick('')}
                         className="flex items-center justify-center gap-2 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl transition-colors text-sm font-medium"
                       >
                         Gmail
-                      </button>
-                      <button
-                        onClick={() => handleEmailClick(getEmailUrls(selectedMethod, selectedPlan).outlook)}
+                      </a>
+                      <a
+                        href={getEmailUrls(selectedMethod, selectedPlan).outlook}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => handleEmailClick('')}
                         className="flex items-center justify-center gap-2 py-3 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-xl transition-colors text-sm font-medium"
                       >
                         Outlook Web
+                      </a>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                      <a
+                        href={getEmailUrls(selectedMethod, selectedPlan).default}
+                        onClick={() => handleEmailClick('')}
+                        className="flex items-center justify-center gap-2 py-3 bg-white/[0.05] hover:bg-white/[0.08] text-zinc-300 border border-white/[0.05] rounded-xl transition-colors text-sm font-medium"
+                      >
+                        Default App
+                      </a>
+                      <button
+                        onClick={() => handleCopy(selectedMethod, selectedPlan)}
+                        className="flex items-center justify-center gap-2 py-3 bg-white/[0.05] hover:bg-white/[0.08] text-zinc-300 border border-white/[0.05] rounded-xl transition-colors text-sm font-medium"
+                      >
+                        {copied ? <CheckCircle size={16} /> : <Copy size={16} />}
+                        {copied ? 'Copied!' : 'Copy Info'}
                       </button>
                     </div>
-                    <button
-                      onClick={() => handleEmailClick(getEmailUrls(selectedMethod, selectedPlan).default)}
-                      className="w-full py-3 bg-white/[0.05] hover:bg-white/[0.08] text-zinc-300 border border-white/[0.05] rounded-xl transition-colors text-sm font-medium mt-1"
-                    >
-                      Default Email App
-                    </button>
                   </motion.div>
                 )}
               </AnimatePresence>

@@ -10,7 +10,7 @@ export function GlobalAuthSync() {
   const [syncStatus, setSyncStatus] = useState<'pending' | 'synced' | 'missing' | 'failed'>('pending')
 
   useEffect(() => {
-    setMounted(true)
+    setTimeout(() => setMounted(true), 0)
     const supabase = createClient()
 
     // Get initial session

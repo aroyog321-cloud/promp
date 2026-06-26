@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { SupabaseClient } from '@supabase/supabase-js';
 
 export async function checkQuotaAndTier(
   supabaseUserClient: SupabaseClient,
@@ -6,6 +6,21 @@ export async function checkQuotaAndTier(
   isRegeneration: boolean,
   hasContextMemory: boolean
 ) {
+  // FIX #17: Gate context-memory BEFORE incrementing quota.
+  // Previously, `increment_usage` consumed the user's daily credit and then
+  // returned 403. Now we do a cheap pre-flight read so the quota is not charged.
+  if (hasContextMemory) {
+    const { data: tierCheck } = await supabaseUserClient
+      .from('usage_stats')
+      .select('tier')
+      .eq('id', userId)
+      .single();
+    const currentTier = tierCheck?.tier || 'free';
+    if (currentTier === 'free' || currentTier === 'pro') {
+      return { error: "Context Memory is locked. Upgrade to Expert.", status: 403 };
+    }
+  }
+
   const { data: usageData, error: usageError } = await supabaseUserClient.rpc('increment_usage', {
     p_user_id: userId,
     p_is_regen: isRegeneration
@@ -29,12 +44,9 @@ export async function checkQuotaAndTier(
     return { error: msg, status: 403 };
   }
 
-  if (hasContextMemory && (tier === 'free' || tier === 'pro')) {
-    return { error: "Context Memory is locked. Upgrade to Expert.", status: 403 };
-  }
-
   return { tier, error: null };
 }
+
 
 export async function getDynamicApiKey(supabaseAdmin: SupabaseClient, defaultKey: string | undefined) {
   try {

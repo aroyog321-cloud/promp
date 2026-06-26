@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 
-import { requireEnv } from '@/lib/env';
 
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
@@ -53,9 +51,9 @@ export async function GET(request: Request) {
       if (ids.length < 1000) keepGoing = false;
     }
 
-    // FIX 3.27: Reset daily request counters so users aren't locked out forever.
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // FIX #20: Reset daily request counters for everyone so users aren't locked out forever.
+    // Unconditional reset is safer than filtering by updated_at, because users who make
+    // a request between 23:59 and 00:05 (cron execution time) would miss the reset.
     const { error: resetError } = await getSupabaseAdmin()
       .from('usage_stats')
       .update({
@@ -63,8 +61,7 @@ export async function GET(request: Request) {
         aggressive_expert_today: 0,
         regenerations_today: 0,
         updated_at: new Date().toISOString()
-      })
-      .lt('updated_at', today.toISOString());
+      });
 
     if (resetError) {
       console.error("Cleanup cron counter-reset error:", resetError);

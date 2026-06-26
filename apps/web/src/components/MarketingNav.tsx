@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import Image from "next/image";
 
 export function MarketingNav() {
   return (
@@ -8,7 +8,7 @@ export function MarketingNav() {
       style={{ background: "rgba(9,9,11,0.8)", backdropFilter: "blur(20px)" }}
     >
       <Link href="/" className="flex items-center gap-2">
-        <img src="/promptly-orb.png" alt="Proenpt Orb" className="size-7 rounded-full object-cover" />
+        <Image src="/promptly-orb.png" alt="Proenpt Orb" width={28} height={28} className="rounded-full object-cover" />
         <span className="font-display font-semibold text-white text-[16px] tracking-tight">
           Proenpt
         </span>

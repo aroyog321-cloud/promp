@@ -51,7 +51,12 @@
       "Bash(gh pr *)",
       "Bash(grep -E \"\\\\.\\(tsx|ts|js|jsx\\)$\")",
       "Bash(xxd)",
-      "Bash(grep -rEn \"eyJ[A-Za-z0-9]{20,}\" D:/flux-extension)"
+      "Bash(grep -rEn \"eyJ[A-Za-z0-9]{20,}\" D:/flux-extension)",
+      "Skill(code-review)",
+      "Bash(xargs grep -l \"service_role\\\\|SERVICE_ROLE\\\\|service-key\\\\|serviceKey\")",
+      "Bash(xargs grep -l \"nextUrl.searchParams\\\\|searchParams\")",
+      "Bash(xargs grep -l \"fetch.*req\\\\|user.*input\\\\|body\\\\..*url\\\\|new URL\")",
+      "Bash(grep -v \"//\")"
     ]
   }
 }

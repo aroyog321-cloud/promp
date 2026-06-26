@@ -48,7 +48,7 @@ export async function GET(request: Request) {
     // Try to load Extension Profile context
     let contextProfile = null;
     if (user) {
-      const { data: profileData, error: profileError } = await supabaseUserClient
+      const { data: profileData } = await supabaseUserClient
         .from('ContextProfile')
         .select('*')
         .eq('userId', user.id)

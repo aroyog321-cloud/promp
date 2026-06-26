@@ -1,4 +1,3 @@
-import { RewriteLevel } from "@promptly/types";
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
@@ -10,9 +9,11 @@ export async function makeGeminiCall(
   apiKey: string,
   routeSignal?: AbortSignal
 ) {
+  // FIX #11: Pass API key as a header instead of a URL query param.
+  // Query params are logged by proxies, CDNs, and Vercel log drains.
   const endpoint = stream 
-    ? `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse&key=${apiKey}`
-    : `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
+    ? `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:streamGenerateContent?alt=sse`
+    : `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
   let attempt = 0;
   const maxAttempts = 3;
@@ -35,7 +36,10 @@ export async function makeGeminiCall(
       
       const response = await fetch(endpoint, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: systemPrompt }] },
           contents: [{ parts: [{ text: userPrompt }] }],
@@ -52,8 +56,10 @@ export async function makeGeminiCall(
       if (!response.ok) {
         const isRetryable = [429, 500, 502, 503, 504].includes(response.status);
         if (isRetryable && attempt < maxAttempts) {
-          const delay = Math.pow(2, attempt) * 1000;
-          await new Promise(res => setTimeout(res, delay));
+          // FIX #12: Start at 1s (attempt-1), not 2s, so retries fit within the 50s route timeout.
+          const baseDelay = Math.pow(2, attempt - 1) * 1000;
+          const jitter = baseDelay * (0.8 + Math.random() * 0.4);
+          await new Promise(res => setTimeout(res, Math.min(jitter, 8000)));
           continue;
         }
         
@@ -61,21 +67,23 @@ export async function makeGeminiCall(
         try {
           const errorData = await response.json();
           errorMsg += ` - ${errorData.error?.message || 'Unknown error'}`;
-        } catch(e) {}
+        } catch {}
         throw new Error(errorMsg);
       }
 
       return response;
-    } catch (e: any) {
-      lastError = e;
+    } catch (e) {
+      lastError = e instanceof Error ? e : new Error(String(e));
+      const isError = e instanceof Error;
       
-      if (routeSignal?.aborted || e.name === 'AbortError') {
+      if (routeSignal?.aborted || (isError && e.name === 'AbortError')) {
         throw e;
       }
       
-      if (e.name === 'TimeoutError' && attempt < maxAttempts) {
-        const delay = Math.pow(2, attempt) * 1000;
-        await new Promise(res => setTimeout(res, delay));
+      if (isError && e.name === 'TimeoutError' && attempt < maxAttempts) {
+        const baseDelay = Math.pow(2, attempt - 1) * 1000;
+        const jitter = baseDelay * (0.8 + Math.random() * 0.4);
+        await new Promise(res => setTimeout(res, Math.min(jitter, 8000)));
         continue;
       }
       if (attempt >= maxAttempts) throw e;

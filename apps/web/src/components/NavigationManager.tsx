@@ -6,8 +6,10 @@ import { useEffect, useState } from 'react'
 import { LogOut, Settings, LayoutDashboard } from 'lucide-react'
 import { createClient } from '../lib/supabaseBrowser'
 
+import type { User } from '@supabase/supabase-js'
+
 function BottomDockNav() {
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<User | null>(null)
   const pathname = usePathname()
   const supabase = createClient()
 
@@ -21,7 +23,7 @@ function BottomDockNav() {
     })
     
     return () => authListener.subscription.unsubscribe()
-  }, [])
+  }, [supabase.auth])
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()

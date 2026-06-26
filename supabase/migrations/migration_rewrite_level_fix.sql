@@ -27,30 +27,23 @@ BEGIN
     ALTER TYPE "RewriteLevel" ADD VALUE 'PROFESSIONAL';
   END IF;
 
-  -- Add STAFF+
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_enum
-    WHERE enumlabel = 'STAFF+'
-    AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'RewriteLevel')
+  -- FIX #2: Normalise enum values to underscore-safe string constants.
+  -- This prevents fragile space/plus handling in TypeScript and APIs.
+  IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'STAFF_PLUS' 
+  AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'RewriteLevel')
   ) THEN
-    ALTER TYPE "RewriteLevel" ADD VALUE 'STAFF+';
+  ALTER TYPE "RewriteLevel" ADD VALUE 'STAFF_PLUS';
   END IF;
 
-  -- Add RESEARCH
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_enum
-    WHERE enumlabel = 'RESEARCH'
-    AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'RewriteLevel')
+  IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'RESEARCH' 
+  AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'RewriteLevel')
   ) THEN
-    ALTER TYPE "RewriteLevel" ADD VALUE 'RESEARCH';
+  ALTER TYPE "RewriteLevel" ADD VALUE 'RESEARCH';
   END IF;
 
-  -- Add PRODUCTION AUDIT
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_enum
-    WHERE enumlabel = 'PRODUCTION AUDIT'
-    AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'RewriteLevel')
+  IF NOT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'PRODUCTION_AUDIT' 
+  AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'RewriteLevel')
   ) THEN
-    ALTER TYPE "RewriteLevel" ADD VALUE 'PRODUCTION AUDIT';
+  ALTER TYPE "RewriteLevel" ADD VALUE 'PRODUCTION_AUDIT';
   END IF;
 END$$;

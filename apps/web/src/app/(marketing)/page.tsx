@@ -1,24 +1,15 @@
 'use client';
 
-import { useState, useEffect, ReactNode } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { AreaChart, Area, XAxis, ResponsiveContainer } from "recharts";
+import { useState, ReactNode } from "react";
+import { motion } from "framer-motion";
 import {
-  Zap, Shield, Globe, Terminal, BarChart2,
+  Zap, Shield, Terminal, BarChart2,
   Check, ChevronRight, ArrowRight, Brain, History, Lightbulb,
   Plus, Minus
 } from "lucide-react";
 import Link from "next/link";
 
-const trafficData = [
-  { time: "Mon", prompts: 42 },
-  { time: "Tue", prompts: 82 },
-  { time: "Wed", prompts: 64 },
-  { time: "Thu", prompts: 112 },
-  { time: "Fri", prompts: 98 },
-  { time: "Sat", prompts: 41 },
-  { time: "Sun", prompts: 27 },
-];
+
 
 const features = [
   { icon: Zap,       label: "Instant Optimization", desc: "Type your raw thoughts. Proenpt restructures them into a highly effective prompt framework in milliseconds.", color: "#3b82f6" },
@@ -99,12 +90,7 @@ function Accordion({ title, children }: { title: string, children: ReactNode }) 
 
 export default function LandingPage() {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("monthly");
-  const [mounted, setMounted] = useState(false);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   return (
     <div className="relative overflow-x-hidden bg-background text-foreground selection:bg-promptly-cyan/30">
@@ -280,7 +266,7 @@ export default function LandingPage() {
               Stop settling for average outputs.
             </h2>
             <p className="mt-4 text-zinc-400 max-w-xl mx-auto">
-              AI models give you exactly what you ask for. We make sure you're asking for the right thing.
+              AI models give you exactly what you ask for. We make sure you&apos;re asking for the right thing.
             </p>
           </div>
         </ScrollReveal>
@@ -530,7 +516,7 @@ export default function LandingPage() {
 
       {/* ── Footer ── */}
       <footer className="relative z-10 py-12 px-6 border-t border-white/[0.08] bg-[#09090b]">
-        <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
           <div>
             <h3 className="font-display text-lg font-bold text-white mb-4">Proenpt</h3>
             <p className="text-zinc-500 text-sm">Supercharge your AI prompts instantly.</p>
@@ -544,18 +530,10 @@ export default function LandingPage() {
             </ul>
           </div>
           <div>
-            <h4 className="font-semibold text-zinc-300 mb-4 text-sm">Resources</h4>
-            <ul className="space-y-2 text-sm text-zinc-500">
-              <li><Link href="#" className="hover:text-zinc-300 transition-colors">Documentation</Link></li>
-              <li><Link href="#" className="hover:text-zinc-300 transition-colors">Blog</Link></li>
-              <li><Link href="#" className="hover:text-zinc-300 transition-colors">Community</Link></li>
-            </ul>
-          </div>
-          <div>
             <h4 className="font-semibold text-zinc-300 mb-4 text-sm">Legal</h4>
             <ul className="space-y-2 text-sm text-zinc-500">
-              <li><Link href="#" className="hover:text-zinc-300 transition-colors">Privacy Policy</Link></li>
-              <li><Link href="#" className="hover:text-zinc-300 transition-colors">Terms of Service</Link></li>
+              <li><Link href="/privacy" className="hover:text-zinc-300 transition-colors">Privacy Policy</Link></li>
+              <li><Link href="/terms" className="hover:text-zinc-300 transition-colors">Terms of Service</Link></li>
             </ul>
           </div>
         </div>

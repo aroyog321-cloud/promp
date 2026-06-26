@@ -25,8 +25,19 @@ function timeAgo(dateStr: string) {
   return 'just now'
 }
 
+interface PromptHistoryItem {
+  id: string;
+  originalPrompt: string | null;
+  optimizedPrompt: string | null;
+  platformUsed: string;
+  promptMode: string | null;
+  isStarred: boolean;
+  responseTime: number | null;
+  createdAt: string;
+}
+
 export default function HistoryPage() {
-  const [prompts, setPrompts] = useState<any[]>([])
+  const [prompts, setPrompts] = useState<PromptHistoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [token, setToken] = useState<string | null>(null)
   const [page, setPage] = useState(0)
@@ -50,7 +61,7 @@ export default function HistoryPage() {
       if (!session) { window.location.href = '/login'; return }
       setToken(session.access_token)
     })
-  }, [])
+  }, [supabase.auth])
 
   // Fetch
   const fetchHistory = useCallback(async () => {
@@ -75,9 +86,12 @@ export default function HistoryPage() {
     } finally {
       setLoading(false)
     }
-  }, [token, page, debouncedSearch])
+  }, [token, page, debouncedSearch, supabase])
 
-  useEffect(() => { fetchHistory() }, [fetchHistory])
+  useEffect(() => { 
+    const t = setTimeout(() => fetchHistory(), 0); 
+    return () => clearTimeout(t);
+  }, [fetchHistory])
 
   // Close menu on outside click
   useEffect(() => {

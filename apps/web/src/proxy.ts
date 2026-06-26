@@ -22,6 +22,18 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
 // Basic in-memory rate limiter for dev fallback
 const rateLimitMap = new Map<string, { count: number, resetTime: number }>();
 
+// FIX #13: Periodically evict stale entries to prevent memory leaks in long-running instances
+if (typeof setInterval !== 'undefined') {
+  setInterval(() => {
+    const now = Date.now();
+    for (const [ip, record] of rateLimitMap.entries()) {
+      if (now > record.resetTime) {
+        rateLimitMap.delete(ip);
+      }
+    }
+  }, 60 * 1000); // Clean up every minute
+}
+
 async function checkRateLimit(ip: string): Promise<boolean> {
   if (ratelimit) {
     try {

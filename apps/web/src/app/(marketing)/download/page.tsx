@@ -1,6 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
-
 export default function DownloadPage() {
   return (
     <div className="flex flex-col min-h-[calc(100vh-73px)]">
@@ -42,7 +40,8 @@ export default function DownloadPage() {
                   Download the latest release of the Promptly Chrome extension.
                 </p>
                 <a 
-                  href="#"
+                  href="/proenpt-extension.zip"
+                  download="proenpt-extension.zip"
                   className="inline-flex items-center gap-2 bg-white text-black px-6 py-3 rounded-xl font-medium hover:bg-zinc-200 transition-colors shadow-[0_0_20px_-5px_rgba(255,255,255,0.2)]"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
@@ -59,7 +58,7 @@ export default function DownloadPage() {
               <div>
                 <h3 className="text-xl font-semibold mb-2">Unzip the File</h3>
                 <p className="text-zinc-400">
-                  Extract the downloaded zip file to a folder on your computer. You'll need this folder in the next step.
+                  Extract the downloaded zip file to a folder on your computer. You&apos;ll need this folder in the next step.
                 </p>
               </div>
             </div>
@@ -85,7 +84,7 @@ export default function DownloadPage() {
               <div>
                 <h3 className="text-xl font-semibold mb-2">Load Unpacked</h3>
                 <p className="text-zinc-400">
-                  Enable "Developer mode" in the top right, click "Load unpacked" in the top left, and select the folder you extracted in Step 2.
+                  Enable &quot;Developer mode&quot; in the top right, click &quot;Load unpacked&quot; in the top left, and select the folder you extracted in Step 2.
                 </p>
               </div>
             </div>

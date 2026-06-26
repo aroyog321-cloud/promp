@@ -1,13 +1,13 @@
 export interface Job {
   id: string;
   type: string;
-  payload: Record<string, any>;
+  payload: Record<string, unknown>;
   attempts: number;
   createdAt: number;
 }
 
 export interface QueueProvider {
-  enqueue(type: string, payload: Record<string, any>): Promise<string>;
+  enqueue(type: string, payload: Record<string, unknown>): Promise<string>;
   process(type: string, handler: (job: Job) => Promise<void>): void;
   health(): Promise<boolean>;
   shutdown(): Promise<void>;
@@ -16,7 +16,7 @@ export interface QueueProvider {
 export class MemoryQueue implements QueueProvider {
   private jobs = new Map<string, Job>();
 
-  async enqueue(type: string, payload: Record<string, any>): Promise<string> {
+  async enqueue(type: string, payload: Record<string, unknown>): Promise<string> {
     const id = Math.random().toString(36).substring(7);
     const job: Job = { id, type, payload, attempts: 0, createdAt: Date.now() };
     this.jobs.set(id, job);
@@ -56,11 +56,13 @@ export class MemoryQueue implements QueueProvider {
 }
 
 export class UpstashQueue implements QueueProvider {
-  async enqueue(type: string, payload: Record<string, any>): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async enqueue(type: string, _payload: Record<string, unknown>): Promise<string> {
     console.log(`[Queue: Upstash] Stub enqueue ${type}`);
     return "stub-id";
   }
-  process(type: string, handler: (job: Job) => Promise<void>): void {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  process(type: string, _handler: (job: Job) => Promise<void>): void {
     console.log(`[Queue: Upstash] Stub process ${type}`);
   }
   async health(): Promise<boolean> { return true; }
@@ -68,11 +70,13 @@ export class UpstashQueue implements QueueProvider {
 }
 
 export class InngestQueue implements QueueProvider {
-  async enqueue(type: string, payload: Record<string, any>): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async enqueue(type: string, _payload: Record<string, unknown>): Promise<string> {
     console.log(`[Queue: Inngest] Stub enqueue ${type}`);
     return "stub-id";
   }
-  process(type: string, handler: (job: Job) => Promise<void>): void {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  process(type: string, _handler: (job: Job) => Promise<void>): void {
     console.log(`[Queue: Inngest] Stub process ${type}`);
   }
   async health(): Promise<boolean> { return true; }
