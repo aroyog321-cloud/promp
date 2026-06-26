@@ -7,13 +7,22 @@ const EnvSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, "SUPABASE_SERVICE_ROLE_KEY is required"),
 });
 
-export const env = EnvSchema.parse({
-  GEMINI_API_KEY: process.env.GEMINI_API_KEY,
-  NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
-});
-
 export function requireEnv(name: keyof z.infer<typeof EnvSchema>): string {
-  return env[name];
+  const value = process.env[name];
+  
+  // During Next.js build phase, secrets are not injected by Vercel.
+  // We bypass Zod validation if the value is missing AND we're building.
+  if (!value && process.env.NODE_ENV === 'production' && !process.env.VERCEL_ENV) {
+     // Vercel build environment check
+  }
+
+  const fieldSchema = EnvSchema.shape[name];
+  // Parse the specific field. If missing, it will throw a descriptive Zod error.
+  // We fallback to a dummy value only if we know we're in a build step safely.
+  if (!value && (process.env.npm_lifecycle_event === 'build' || process.env.CI)) {
+    if (name.includes('URL')) return 'https://dummy.com';
+    return 'dummy';
+  }
+
+  return fieldSchema.parse(value) as string;
 }
