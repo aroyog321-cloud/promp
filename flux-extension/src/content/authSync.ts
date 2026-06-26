@@ -40,7 +40,7 @@ async function saveToken(token: string, refreshToken: string, supabaseUrl: strin
       expiresAt = jwt.exp * 1000; // Convert to ms
     }
     
-    const next = { ...current, accessToken: token, refreshToken, supabaseAnonKey, expiresAt, apiBaseUrl };
+    const next = { ...current, accessToken: token, refreshToken, supabaseUrl, supabaseAnonKey, expiresAt, apiBaseUrl };
     await chrome.storage.local.set({ [STORAGE_KEY]: next });
     if (!chrome.runtime?.id) return;
     

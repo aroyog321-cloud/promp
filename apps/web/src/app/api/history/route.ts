@@ -28,15 +28,13 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Invalid Access Token." }, { status: 401 });
     }
 
-    const supabaseUserClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } }
-    });
+    const adminClient = getSupabaseAdmin();
 
     const url = new URL(request.url);
     const rawLimit = parseInt(url.searchParams.get('limit') || '30', 10);
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 200) : 30;
 
-    let query = supabaseUserClient
+    let query = adminClient
       .from('PromptHistory')
       .select('id, platformUsed, promptMode, rewriteLevel, createdAt, isStarred, originalPrompt, optimizedPrompt, responseTime')
       .eq('userId', user.id)
@@ -75,9 +73,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const supabaseUserClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } }
-    });
+    const adminClient = getSupabaseAdmin();
 
     const MODE_MAP: Record<string, string | null> = {
       AUTO: null,
@@ -111,7 +107,7 @@ export async function POST(request: Request) {
     const promptMode = MODE_MAP[rawMode] ?? null;
     const rewriteLevel = LEVEL_MAP[rawLevel] ?? null;
 
-    const { data, error: insertError } = await supabaseUserClient.from('PromptHistory').insert({
+    const { data, error: insertError } = await adminClient.from('PromptHistory').insert({
       id: crypto.randomUUID(),
       userId: user.id,
       originalPrompt: body.originalPrompt,
@@ -148,11 +144,9 @@ export async function DELETE(request: Request) {
     const id = url.searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'Missing id query param.' }, { status: 400 });
 
-    const supabaseUserClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } }
-    });
+    const adminClient = getSupabaseAdmin();
 
-    const { error: deleteError } = await supabaseUserClient
+    const { error: deleteError } = await adminClient
       .from('PromptHistory')
       .delete()
       .eq('id', id)
@@ -184,11 +178,9 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "Missing id or isStarred" }, { status: 400 });
     }
 
-    const supabaseUserClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } }
-    });
+    const adminClient = getSupabaseAdmin();
 
-    const { error: updateError } = await supabaseUserClient
+    const { error: updateError } = await adminClient
       .from('PromptHistory')
       .update({ isStarred: body.isStarred })
       .eq('id', body.id)

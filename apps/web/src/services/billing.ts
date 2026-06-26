@@ -1,7 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 
 export async function checkQuotaAndTier(
-  supabaseUserClient: SupabaseClient,
+  supabaseAdmin: SupabaseClient,
   userId: string,
   isRegeneration: boolean,
   hasContextMemory: boolean
@@ -10,7 +10,7 @@ export async function checkQuotaAndTier(
   // Previously, `increment_usage` consumed the user's daily credit and then
   // returned 403. Now we do a cheap pre-flight read so the quota is not charged.
   if (hasContextMemory) {
-    const { data: tierCheck } = await supabaseUserClient
+    const { data: tierCheck } = await supabaseAdmin
       .from('usage_stats')
       .select('tier')
       .eq('id', userId)
@@ -21,7 +21,7 @@ export async function checkQuotaAndTier(
     }
   }
 
-  const { data: usageData, error: usageError } = await supabaseUserClient.rpc('increment_usage', {
+  const { data: usageData, error: usageError } = await supabaseAdmin.rpc('increment_usage', {
     p_user_id: userId,
     p_is_regen: isRegeneration
   });

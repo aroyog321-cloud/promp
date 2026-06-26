@@ -75,13 +75,17 @@ export function createOpenAIStream(response: Response, context?: StreamContext) 
         };
         const mappedLevel = LEVEL_MAP[rawLevel] || 'MEDIUM';
 
+        let mappedMode = context.body.mode?.toUpperCase()?.replace(/-/g, '_') ?? 'GENERAL';
+        const VALID_MODES = ['GENERAL', 'DEVELOPER', 'DESIGNER', 'MARKETING', 'RESEARCH', 'BUSINESS', 'CONTENT_CREATOR', 'STARTUP_FOUNDER'];
+        if (!VALID_MODES.includes(mappedMode)) mappedMode = 'GENERAL';
+
         try {
           await context.supabase.from('PromptHistory').insert([{
             userId: context.user.id,
             originalPrompt: context.body.text,
             optimizedPrompt: accumulatedText.trim(),
             platformUsed: context.platform || context.body.platform || 'api',
-            promptMode: context.body.mode?.toUpperCase() ?? 'GENERAL',
+            promptMode: mappedMode,
             rewriteLevel: mappedLevel,
             responseTime,
           }]);

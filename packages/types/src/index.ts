@@ -63,6 +63,7 @@ export interface PromptlySettings {
   categorizerApiKey?: string;
   accessToken?: string;
   refreshToken?: string;
+  supabaseUrl?: string;
   supabaseAnonKey?: string;
   expiresAt?: number;
   contextProfile: ContextProfile;
@@ -81,6 +82,7 @@ export const DEFAULT_SETTINGS: PromptlySettings = {
   categorizerApiKey: "",
   accessToken: "",
   refreshToken: "",
+  supabaseUrl: "",
   supabaseAnonKey: "",
   contextProfile: {},
   contextInjectionEnabled: false

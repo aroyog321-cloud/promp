@@ -46,7 +46,7 @@ export const POST = withMetrics(async (request: Request) => {
     const hasContextMemory = !!body.context && Object.values(body.context).some(v => !!v);
 
     // Parallelize independent remote calls
-    const billingPromise = checkQuotaAndTier(supabaseUserClient, user.id, isRegeneration, hasContextMemory);
+    const billingPromise = checkQuotaAndTier(supabaseAdmin, user.id, isRegeneration, hasContextMemory);
     const apiKeyPromise = getDynamicApiKey(supabaseAdmin, GEMINI_API_KEY);
     let classifyPromise: Promise<string | null> | null = null;
     
@@ -106,7 +106,8 @@ export const POST = withMetrics(async (request: Request) => {
     );
 
     if (body.stream) {
-      return createOpenAIStream(finalRes, { user, body, platform: platform || "api", supabase: supabaseUserClient });
+      // Pass supabaseAdmin instead of supabaseUserClient
+      return createOpenAIStream(finalRes, { user, body, platform: platform || "api", supabase: supabaseAdmin });
     } else {
       const finalData = await finalRes.json();
       const optimizedText = finalData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
@@ -123,7 +124,7 @@ export const POST = withMetrics(async (request: Request) => {
         const rawLevel = body.level?.toUpperCase() ?? 'MEDIUM';
         const LEVEL_MAP: Record<string, string> = {
           'LIGHT': 'LIGHT', 'MEDIUM': 'MEDIUM', 'AGGRESSIVE': 'AGGRESSIVE', 'EXPERT': 'EXPERT',
-          'BASIC': 'LIGHT', 'PROFESSIONAL': 'MEDIUM', 'STAFF+': 'AGGRESSIVE', 'RESEARCH': 'AGGRESSIVE', 'PRODUCTION AUDIT': 'EXPERT'
+          'BASIC': 'BASIC', 'PROFESSIONAL': 'PROFESSIONAL', 'STAFF+': 'STAFF_PLUS', 'RESEARCH': 'RESEARCH', 'PRODUCTION AUDIT': 'PRODUCTION_AUDIT'
         };
         const mappedLevel = LEVEL_MAP[rawLevel] || 'MEDIUM';
         
@@ -131,7 +132,8 @@ export const POST = withMetrics(async (request: Request) => {
         const VALID_MODES = ['GENERAL', 'DEVELOPER', 'DESIGNER', 'MARKETING', 'RESEARCH', 'BUSINESS', 'CONTENT_CREATOR', 'STARTUP_FOUNDER'];
         if (!VALID_MODES.includes(mappedMode)) mappedMode = 'GENERAL';
 
-        await supabaseUserClient.from('PromptHistory').insert([{
+        // Use supabaseAdmin instead of supabaseUserClient to bypass RLS
+        await supabaseAdmin.from('PromptHistory').insert([{
           userId: user.id,
           originalPrompt: body.text,
           optimizedPrompt: optimizedText,

@@ -30,7 +30,8 @@ export async function GET(request: Request) {
     let total_requests_today = 0;
     
     if (user) {
-      const { data: statsData, error: statsError } = await supabaseUserClient
+      // Use the admin client (supabase) instead of supabaseUserClient to bypass RLS
+      const { data: statsData, error: statsError } = await supabase
         .from('usage_stats')
         .select('*')
         .eq('id', user.id)
@@ -43,7 +44,7 @@ export async function GET(request: Request) {
         // Auto-upgrade existing free users to expert
         if (tier === 'free') {
           tier = 'expert';
-          await supabaseUserClient.from('usage_stats').update({ tier: 'expert' }).eq('id', user.id);
+          await supabase.from('usage_stats').update({ tier: 'expert' }).eq('id', user.id);
         }
       } else if (statsError && statsError.code === 'PGRST116') {
         // Fallback for missing row
@@ -54,7 +55,8 @@ export async function GET(request: Request) {
     // Try to load Extension Profile context
     let contextProfile = null;
     if (user) {
-      const { data: profileData } = await supabaseUserClient
+      // Use the admin client (supabase) instead of supabaseUserClient to bypass RLS
+      const { data: profileData } = await supabase
         .from('ContextProfile')
         .select('*')
         .eq('userId', user.id)
