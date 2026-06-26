@@ -109,13 +109,43 @@ async function addToPendingQueue(entry: HistoryEntry): Promise<void> {
   await writePendingQueue(queue.slice(-50));
 }
 
+async function bgFetch(url: string, options: any = {}): Promise<Response> {
+  return new Promise<Response>((resolve, reject) => {
+    if (typeof chrome === "undefined" || !chrome.runtime?.id) {
+      return reject(new Error("Extension context invalidated"));
+    }
+    chrome.runtime.sendMessage({
+      type: "PROMPTLY_BG_FETCH",
+      url,
+      method: options.method || "GET",
+      headers: options.headers || {},
+      body: options.body ? JSON.parse(options.body) : undefined
+    }, (response) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+      } else if (!response) {
+        reject(new Error("No response from background proxy"));
+      } else {
+        const simulatedResponse = {
+          ok: response.ok,
+          status: response.status,
+          statusText: response.statusText,
+          json: async () => response.data,
+          text: async () => typeof response.data === 'string' ? response.data : JSON.stringify(response.data)
+        } as Response;
+        resolve(simulatedResponse);
+      }
+    });
+  });
+}
+
 async function postEntryToServer(
   entry: HistoryEntry,
   auth: { accessToken: string; apiBaseUrl: string }
 ): Promise<{ serverId?: string; ok: boolean }> {
   try {
     const API_BASE = auth.apiBaseUrl.replace(/\/$/, "");
-    const res = await fetch(`${API_BASE}/api/history`, {
+    const res = await bgFetch(`${API_BASE}/api/history`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -153,7 +183,7 @@ export const useHistory = create<HistoryState>((set, get) => ({
       const settings = await getSettings();
       if (settings.apiBaseUrl && settings.accessToken) {
         const API_BASE = settings.apiBaseUrl.replace(/\/$/, "");
-        const res = await fetch(`${API_BASE}/api/history?limit=${MAX_ENTRIES}`, {
+        const res = await bgFetch(`${API_BASE}/api/history?limit=${MAX_ENTRIES}`, {
           headers: { Authorization: `Bearer ${settings.accessToken}` },
         });
         if (res.ok) {
@@ -286,7 +316,7 @@ export const useHistory = create<HistoryState>((set, get) => ({
     try {
       const settings = await getSettings();
       if (settings.apiBaseUrl && settings.accessToken) {
-        fetch(`${settings.apiBaseUrl.replace(/\/$/, "")}/api/history?id=${encodeURIComponent(id)}`, {
+        bgFetch(`${settings.apiBaseUrl.replace(/\/$/, "")}/api/history?id=${encodeURIComponent(id)}`, {
           method: "DELETE",
           headers: { Authorization: `Bearer ${settings.accessToken}` },
         }).catch(e => console.warn("[Promptly] Server delete failed:", e));
@@ -315,7 +345,7 @@ export const useHistory = create<HistoryState>((set, get) => ({
       const accessToken = settings.accessToken;
 
       if (apiBaseUrl && accessToken) {
-        fetch(`${apiBaseUrl}/api/history`, {
+        bgFetch(`${apiBaseUrl}/api/history`, {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",

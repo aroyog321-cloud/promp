@@ -17,6 +17,36 @@ class SimpleCache<K, V> {
 
 const PROMPT_CACHE = new SimpleCache<string, OptimizeResponse>(20);
 
+async function bgFetch(url: string, options: any = {}): Promise<Response> {
+  return new Promise<Response>((resolve, reject) => {
+    if (typeof chrome === "undefined" || !chrome.runtime?.id) {
+      return reject(new Error("Extension context invalidated"));
+    }
+    chrome.runtime.sendMessage({
+      type: "PROMPTLY_BG_FETCH",
+      url,
+      method: options.method || "GET",
+      headers: options.headers || {},
+      body: options.body ? JSON.parse(options.body) : undefined
+    }, (response) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+      } else if (!response) {
+        reject(new Error("No response from background proxy"));
+      } else {
+        const simulatedResponse = {
+          ok: response.ok,
+          status: response.status,
+          statusText: response.statusText,
+          json: async () => response.data,
+          text: async () => typeof response.data === 'string' ? response.data : JSON.stringify(response.data)
+        } as Response;
+        resolve(simulatedResponse);
+      }
+    });
+  });
+}
+
 
 async function directAIFetch(endpoint: string, apiKey: string | undefined, messages: any[], config: any, stream: boolean, onChunk?: (chunk: string) => void, signal?: AbortSignal) {
   const payload = {
@@ -278,17 +308,87 @@ ${draftText}`;
           return response;
         }
       } else {
-        // Next.js Route
+        // Next.js Route (BG Proxied to bypass CORS, CSP, and loopback/PNA restrictions)
         let payload: any = { ...req, platform: req.platform || window.location.hostname || "unknown" };
-        const res = await fetch(endpoint, {
+        
+        // Handle streaming path via background port connection
+        if (req.stream && options?.onChunk) {
+          return new Promise<OptimizeResponse>((resolve, reject) => {
+            const port = chrome.runtime.connect({ name: "promptly-stream-proxy" });
+            let fullText = "";
+            let sseBuffer = "";
+            
+            port.postMessage({
+              type: "START_STREAM",
+              url: endpoint,
+              headers: {
+                "Content-Type": "application/json",
+                ...(config.accessToken ? { "Authorization": `Bearer ${config.accessToken}` } : (config.apiKey ? { "Authorization": `Bearer ${config.apiKey}` } : {}))
+              },
+              body: payload
+            });
+            
+            port.onMessage.addListener(async (msg) => {
+              if (msg.type === "CHUNK") {
+                const chunk = msg.chunk;
+                sseBuffer += chunk;
+                const lines = sseBuffer.split('\n');
+                sseBuffer = lines.pop() ?? "";
+                
+                for (const line of lines) {
+                  if (line.startsWith('data: ')) {
+                    const dataStr = line.slice(6).trim();
+                    if (dataStr === '[DONE]') continue;
+                    try {
+                      const data = JSON.parse(dataStr);
+                      if (data.choices && data.choices[0]?.delta?.content) {
+                        const delta = data.choices[0].delta.content;
+                        fullText += delta;
+                        options.onChunk(delta);
+                      }
+                    } catch (e) {}
+                  }
+                }
+              } else if (msg.type === "DONE") {
+                port.disconnect();
+                const response: OptimizeResponse = { optimized: fullText.trim(), source: "api" };
+                if (!req.refinement) PROMPT_CACHE.set(cacheKey, response);
+                resolve(response);
+              } else if (msg.type === "ERROR") {
+                port.disconnect();
+                
+                if (msg.status === 401) {
+                  // Clear token on 401
+                  if (typeof chrome !== 'undefined' && chrome.storage) {
+                    try {
+                      chrome.storage.local.get("promptly_settings_v1", (res) => {
+                        const stored = res["promptly_settings_v1"];
+                        if (stored) {
+                          chrome.storage.local.set({ promptly_settings_v1: { ...stored, accessToken: undefined, expiresAt: undefined } });
+                        }
+                      });
+                      chrome.storage.local.remove('apiPlanCache');
+                    } catch(e){}
+                  }
+                  reject(new Error(`401: ${msg.error}`));
+                } else {
+                  reject(new Error(msg.error || "Streaming failed"));
+                }
+              }
+            });
+          });
+        }
+
+        // Handle non-streaming path via bgFetch
+        const res = await bgFetch(endpoint, {
           method: "POST",
           headers: { 
             "Content-Type": "application/json", 
             ...(config.accessToken ? { "Authorization": `Bearer ${config.accessToken}` } : (config.apiKey ? { "Authorization": `Bearer ${config.apiKey}` } : {})) 
           },
-          body: JSON.stringify(payload),
-          signal: options?.abortSignal
+          body: JSON.stringify(payload)
         });
+
         if (!res.ok) {
           let errorMsg = "API responded with " + res.status;
           try {
@@ -316,41 +416,6 @@ ${draftText}`;
           }
           
           throw new Error(errorMsg);
-        }
-        
-        if (req.stream && options?.onChunk && res.body) {
-          const reader = res.body.getReader();
-          const decoder = new TextDecoder();
-          let fullText = "";
-          let sseBuffer = ""; // buffer for partial SSE lines spanning chunk boundaries
-          
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            
-            const chunk = decoder.decode(value, { stream: true });
-            sseBuffer += chunk;
-            const lines = sseBuffer.split('\n');
-            sseBuffer = lines.pop() ?? ""; // keep the last partial line in the buffer
-            
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                const dataStr = line.slice(6).trim();
-                if (dataStr === '[DONE]') continue;
-                try {
-                  const data = JSON.parse(dataStr);
-                  if (data.choices && data.choices[0]?.delta?.content) {
-                    const delta = data.choices[0].delta.content;
-                    fullText += delta;
-                    options.onChunk(delta);
-                  }
-                } catch (e) {}
-              }
-            }
-          }
-          const response: OptimizeResponse = { optimized: fullText.trim(), source: "api" };
-          if (!req.refinement) PROMPT_CACHE.set(cacheKey, response);
-          return response;
         }
 
         const data = await res.json();

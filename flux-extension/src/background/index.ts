@@ -65,3 +65,81 @@ function migrateApiBaseUrl() {
 }
 
 chrome.runtime.onStartup.addListener(migrateApiBaseUrl);
+
+// BACKGROUND FETCH PROXY:
+// Bypasses host-page CORS, Content Security Policy (CSP), and Private Network Access (PNA)
+// by executing all API fetches from the privileged extension background context.
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === "PROMPTLY_BG_FETCH") {
+    fetch(message.url, {
+      method: message.method || "GET",
+      headers: message.headers || {},
+      body: message.body ? JSON.stringify(message.body) : undefined
+    })
+    .then(async (res) => {
+      const ok = res.ok;
+      const status = res.status;
+      const statusText = res.statusText;
+      let data = null;
+      try {
+        data = await res.json();
+      } catch (e) {
+        try {
+          data = await res.text();
+        } catch (e) {}
+      }
+      sendResponse({ ok, status, statusText, data });
+    })
+    .catch((error) => {
+      sendResponse({ ok: false, error: error.message || String(error) });
+    });
+    return true; // Keep the message channel open for asynchronous response
+  }
+});
+
+// BACKGROUND STREAMING PROXY:
+// Connects a persistent port between the content script and background script
+// to stream chunks in real-time without hitting browser sandbox blocks.
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name === "promptly-stream-proxy") {
+    port.onMessage.addListener(async (message) => {
+      if (message.type === "START_STREAM") {
+        try {
+          const res = await fetch(message.url, {
+            method: "POST",
+            headers: message.headers || {},
+            body: JSON.stringify(message.body)
+          });
+          
+          if (!res.ok) {
+            let errorMsg = `Request failed with status ${res.status}`;
+            try {
+              const errData = await res.json();
+              if (errData.error) errorMsg = errData.error;
+            } catch(e){}
+            port.postMessage({ type: "ERROR", status: res.status, error: errorMsg });
+            return;
+          }
+          
+          const reader = res.body?.getReader();
+          if (!reader) {
+            port.postMessage({ type: "ERROR", error: "No response body found" });
+            return;
+          }
+          
+          const decoder = new TextDecoder();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            port.postMessage({ type: "CHUNK", chunk });
+          }
+          port.postMessage({ type: "DONE" });
+        } catch (e: any) {
+          port.postMessage({ type: "ERROR", error: e.message || String(e) });
+        }
+      }
+    });
+  }
+});
+
