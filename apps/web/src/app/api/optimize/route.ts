@@ -124,7 +124,10 @@ export const POST = withMetrics(async (request: Request) => {
         const rawLevel = body.level?.toUpperCase() ?? 'MEDIUM';
         const LEVEL_MAP: Record<string, string> = {
           'LIGHT': 'LIGHT', 'MEDIUM': 'MEDIUM', 'AGGRESSIVE': 'AGGRESSIVE', 'EXPERT': 'EXPERT',
-          'BASIC': 'BASIC', 'PROFESSIONAL': 'PROFESSIONAL', 'STAFF+': 'STAFF_PLUS', 'RESEARCH': 'RESEARCH', 'PRODUCTION AUDIT': 'PRODUCTION_AUDIT'
+          'BASIC': 'BASIC', 'PROFESSIONAL': 'PROFESSIONAL', 
+          'STAFF+': 'STAFF+', 'STAFF_PLUS': 'STAFF+', 
+          'RESEARCH': 'RESEARCH', 
+          'PRODUCTION AUDIT': 'PRODUCTION AUDIT', 'PRODUCTION_AUDIT': 'PRODUCTION AUDIT'
         };
         const mappedLevel = LEVEL_MAP[rawLevel] || 'MEDIUM';
         
@@ -134,6 +137,7 @@ export const POST = withMetrics(async (request: Request) => {
 
         // Use supabaseAdmin instead of supabaseUserClient to bypass RLS
         await supabaseAdmin.from('PromptHistory').insert([{
+          id: crypto.randomUUID(),
           userId: user.id,
           originalPrompt: body.text,
           optimizedPrompt: optimizedText,

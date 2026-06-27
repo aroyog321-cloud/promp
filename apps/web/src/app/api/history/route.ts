@@ -98,9 +98,11 @@ export async function POST(request: Request) {
       EXPERT: "EXPERT",
       BASIC: "BASIC",
       PROFESSIONAL: "PROFESSIONAL",
-      "STAFF+": "STAFF_PLUS",
+      "STAFF+": "STAFF+",
+      "STAFF_PLUS": "STAFF+",
       RESEARCH: "RESEARCH",
-      "PRODUCTION AUDIT": "PRODUCTION_AUDIT"
+      "PRODUCTION AUDIT": "PRODUCTION AUDIT",
+      "PRODUCTION_AUDIT": "PRODUCTION AUDIT"
     };
 
     const rawMode = (body.promptMode || body.mode || "").toString().replace(/-/g, "_").toUpperCase();
