@@ -37,6 +37,11 @@ enum RewriteLevel {
   MEDIUM
   AGGRESSIVE
   EXPERT
+  BASIC
+  PROFESSIONAL
+  STAFF_PLUS
+  RESEARCH
+  PRODUCTION_AUDIT
 }
 
 model User {
