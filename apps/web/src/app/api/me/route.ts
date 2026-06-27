@@ -38,17 +38,11 @@ export async function GET(request: Request) {
         .single();
 
       if (statsData) {
-        tier = statsData.tier || 'expert';
+        tier = statsData.tier || 'free';
         total_requests_today = statsData.total_requests_today || 0;
-        
-        // Auto-upgrade existing free users to expert
-        if (tier === 'free') {
-          tier = 'expert';
-          await supabase.from('usage_stats').update({ tier: 'expert' }).eq('id', user.id);
-        }
       } else if (statsError && statsError.code === 'PGRST116') {
         // Fallback for missing row
-        tier = 'expert';
+        tier = 'free';
       }
     }
 
