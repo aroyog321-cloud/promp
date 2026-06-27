@@ -56,6 +56,32 @@ export default function HistoryPage() {
     return () => clearTimeout(t)
   }, [search])
 
+  // Fetch
+  const fetchHistory = useCallback(async () => {
+    if (!token || !user) return
+    setLoading(true)
+    try {
+      let query = supabase
+        .from('PromptHistory')
+        .select('*', { count: 'exact' })
+        .eq('userId', user.id)
+        .order('createdAt', { ascending: false })
+        .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1)
+
+      if (debouncedSearch.trim()) {
+        query = query.ilike('originalPrompt', `%${debouncedSearch}%`)
+      }
+
+      const { data, count } = await query
+      setPrompts(data || [])
+      setTotalCount(count || 0)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
+    }
+  }, [token, user, page, debouncedSearch, supabase])
+
   // Auth
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -85,31 +111,6 @@ export default function HistoryPage() {
     })
   }, [fetchHistory, supabase])
 
-  // Fetch
-  const fetchHistory = useCallback(async () => {
-    if (!token || !user) return
-    setLoading(true)
-    try {
-      let query = supabase
-        .from('PromptHistory')
-        .select('*', { count: 'exact' })
-        .eq('userId', user.id)
-        .order('createdAt', { ascending: false })
-        .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1)
-
-      if (debouncedSearch.trim()) {
-        query = query.ilike('originalPrompt', `%${debouncedSearch}%`)
-      }
-
-      const { data, count } = await query
-      setPrompts(data || [])
-      setTotalCount(count || 0)
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setLoading(false)
-    }
-  }, [token, user, page, debouncedSearch, supabase])
 
   useEffect(() => { 
     const t = setTimeout(() => fetchHistory(), 0); 
