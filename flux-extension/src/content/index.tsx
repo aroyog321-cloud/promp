@@ -8,7 +8,7 @@ import { FloatingButton } from "./FloatingButton";
 import { OptimizerPanel } from "./OptimizerPanel";
 import { HistoryPanel } from "./HistoryPanel";
 import { optimizePrompt } from "../lib/promptEngine";
-import { useHistory } from "../lib/history";
+import { useHistory, initHistoryDrain } from "../lib/history";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error?: Error }> {
   constructor(props: { children: ReactNode }) {
@@ -115,6 +115,7 @@ const PromptlyApp: React.FC<{ platform: PlatformConfig }> = ({ platform }) => {
   React.useEffect(() => {
     getSettings().then(setSettings);
     onSettingsChanged(setSettings);
+    initHistoryDrain();
 
     chrome.storage.local.get(['hasSeenOnboarding'], (res) => {
       if (!res.hasSeenOnboarding) {

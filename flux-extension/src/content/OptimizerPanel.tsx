@@ -186,6 +186,11 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
         source: result.source as any
       }, { accessToken: settings.accessToken, apiBaseUrl: settings.apiBaseUrl });
 
+      if (result.source === "local-fallback") {
+        setToast("Saved locally (offline) ✓");
+        setTimeout(() => setToast(null), 3000);
+      }
+
       // Broadcast so HistoryPanel refreshes live without needing to re-open
       window.postMessage({ type: "PROMPTLY_HISTORY_UPDATED" }, window.location.origin);
 

@@ -309,7 +309,7 @@ ${draftText}`;
         }
       } else {
         // Next.js Route (BG Proxied to bypass CORS, CSP, and loopback/PNA restrictions)
-        let payload: any = { ...req, platform: req.platform || window.location.hostname || "unknown" };
+        let payload: any = { ...req, clientWillSync: true, platform: req.platform || window.location.hostname || "unknown" };
         
         // Handle streaming path via background port connection
         if (req.stream && options?.onChunk) {

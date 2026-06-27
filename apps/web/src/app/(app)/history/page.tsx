@@ -40,6 +40,7 @@ export default function HistoryPage() {
   const [prompts, setPrompts] = useState<PromptHistoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [token, setToken] = useState<string | null>(null)
+  const [user, setUser] = useState<{ id: string } | null>(null)
   const [page, setPage] = useState(0)
   const [totalCount, setTotalCount] = useState(0)
   const [search, setSearch] = useState('')
@@ -60,17 +61,19 @@ export default function HistoryPage() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) { window.location.href = '/login'; return }
       setToken(session.access_token)
+      setUser(session.user)
     })
   }, [supabase.auth])
 
   // Fetch
   const fetchHistory = useCallback(async () => {
-    if (!token) return
+    if (!token || !user) return
     setLoading(true)
     try {
       let query = supabase
         .from('PromptHistory')
         .select('*', { count: 'exact' })
+        .eq('userId', user.id)
         .order('createdAt', { ascending: false })
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1)
 
@@ -86,12 +89,27 @@ export default function HistoryPage() {
     } finally {
       setLoading(false)
     }
-  }, [token, page, debouncedSearch, supabase])
+  }, [token, user, page, debouncedSearch, supabase])
 
   useEffect(() => { 
     const t = setTimeout(() => fetchHistory(), 0); 
     return () => clearTimeout(t);
   }, [fetchHistory])
+
+  // Realtime subscription
+  useEffect(() => {
+    if (!user) return
+    const channel = supabase
+      .channel('history-realtime')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'PromptHistory',
+        filter: `userId=eq.${user.id}`,
+      }, () => fetchHistory())
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [user, fetchHistory, supabase])
 
   // Close menu on outside click
   useEffect(() => {

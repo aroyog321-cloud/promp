@@ -10,6 +10,7 @@ interface StreamContext {
   };
   platform: string;
   supabase: SupabaseClient;
+  clientWillSync?: boolean;
 }
 
 /**
@@ -66,7 +67,7 @@ export function createOpenAIStream(response: Response, context?: StreamContext) 
       // Stream complete — persist to PromptHistory server-side.
       // This is the only reliable place: the extension may disconnect, crash,
       // or switch tabs before it can POST to /api/history itself.
-      if (context && accumulatedText.trim()) {
+      if (context && accumulatedText.trim() && !context.clientWillSync) {
         const responseTime = (Date.now() - startTime) / 1000;
         const rawLevel = context.body.level?.toUpperCase() ?? 'MEDIUM';
         const LEVEL_MAP: Record<string, string> = {

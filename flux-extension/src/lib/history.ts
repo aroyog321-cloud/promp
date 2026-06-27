@@ -189,14 +189,35 @@ export const useHistory = create<HistoryState>((set, get) => ({
         if (res.ok) {
           const serverEntries = await res.json();
           const merged = new Map<string, HistoryEntry>();
+          const DB_LEVEL_TO_EXTENSION: Record<string, string> = {
+            LIGHT: "Basic",
+            MEDIUM: "Professional",
+            AGGRESSIVE: "Staff+",
+            EXPERT: "Production Audit",
+            BASIC: "Basic",
+            PROFESSIONAL: "Professional",
+            STAFF_PLUS: "Staff+",
+            RESEARCH: "Research",
+            PRODUCTION_AUDIT: "Production Audit",
+          };
+          const DB_MODE_TO_EXTENSION: Record<string, string> = {
+            GENERAL: "general",
+            DEVELOPER: "developer",
+            DESIGNER: "designer",
+            MARKETING: "marketing",
+            RESEARCH: "research",
+            BUSINESS: "business",
+            CONTENT_CREATOR: "content-creator",
+            STARTUP_FOUNDER: "startup-founder",
+          };
           serverEntries.forEach((se: any) => {
             merged.set(se.id, {
               id: se.id,
               text: se.originalPrompt,
               optimized: se.optimizedPrompt,
               platform: se.platformUsed,
-              mode: (se.promptMode || "auto").toLowerCase(),
-              level: (se.rewriteLevel || "medium").toLowerCase(),
+              mode: (DB_MODE_TO_EXTENSION[(se.promptMode || "").toUpperCase()] ?? "general") as PromptMode,
+              level: (DB_LEVEL_TO_EXTENSION[(se.rewriteLevel || "").toUpperCase()] ?? "Professional") as RewriteLevel,
               ts: new Date(se.createdAt).getTime(),
               source: "api",
               isStarred: se.isStarred ?? false,
@@ -375,4 +396,19 @@ export function formatRelative(ts: number, now: number = Date.now()): string {
   if (day < 7) return `${day}d`;
   const d = new Date(ts);
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+export function initHistoryDrain() {
+  if (typeof chrome !== "undefined" && chrome.storage) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local' || !changes.promptly_settings_v1) return;
+      const newSettings = changes.promptly_settings_v1.newValue;
+      if (newSettings?.accessToken && newSettings?.apiBaseUrl) {
+        useHistory.getState().drainPendingQueue({
+          accessToken: newSettings.accessToken,
+          apiBaseUrl: newSettings.apiBaseUrl,
+        });
+      }
+    });
+  }
 }

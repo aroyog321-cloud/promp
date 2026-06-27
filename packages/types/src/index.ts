@@ -99,6 +99,7 @@ export interface OptimizeRequest {
   previousPrompt?: string;
   platform?: string;
   reasoningDepth?: number;
+  clientWillSync?: boolean;
 }
 
 export interface OptimizeResponse {
