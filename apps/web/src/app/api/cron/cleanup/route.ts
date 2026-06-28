@@ -51,24 +51,7 @@ export async function GET(request: Request) {
       if (ids.length < 1000) keepGoing = false;
     }
 
-    // FIX #20: Reset daily request counters for everyone so users aren't locked out forever.
-    // Unconditional reset is safer than filtering by updated_at, because users who make
-    // a request between 23:59 and 00:05 (cron execution time) would miss the reset.
-    const { error: resetError } = await getSupabaseAdmin()
-      .from('usage_stats')
-      .update({
-        total_requests_today: 0,
-        aggressive_expert_today: 0,
-        regenerations_today: 0,
-        updated_at: new Date().toISOString()
-      });
-
-    if (resetError) {
-      console.error("Cleanup cron counter-reset error:", resetError);
-      // Non-fatal — still return success for the delete portion.
-    }
-
-    return NextResponse.json({ success: true, message: `Cleanup completed. Deleted ${totalDeleted} entries and reset daily counters.` });
+    return NextResponse.json({ success: true, message: `Cleanup completed. Deleted ${totalDeleted} entries.` });
   } catch (error) {
     console.error("Cleanup cron exception:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

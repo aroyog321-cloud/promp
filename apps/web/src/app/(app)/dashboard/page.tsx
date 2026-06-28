@@ -114,14 +114,8 @@ export default function DashboardPage() {
             setStats(insertedStats)
           }
         } else if (statsData) {
-          if (statsData.tier === 'free') {
-            await supabase.from('usage_stats').update({ tier: 'expert' }).eq('id', currentUser.id);
-            setTier('expert')
-            setStats({ ...statsData, tier: 'expert' })
-          } else {
-            setTier(statsData.tier as 'free' | 'pro' | 'expert')
-            setStats(statsData)
-          }
+          setTier(statsData.tier as 'free' | 'pro' | 'expert')
+          setStats(statsData)
         }
 
         // Try to load context profiles

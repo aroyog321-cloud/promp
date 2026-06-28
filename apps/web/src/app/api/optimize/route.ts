@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server';
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 import type { OptimizeResponse, PromptMode } from '@promptly/types';
 import { buildSystemPrompt, buildUserPrompt, localOptimize } from '@promptly/prompt-engine';
 
@@ -12,6 +15,7 @@ import { withMetrics } from '@/lib/metrics';
 import { authenticateRequest } from './authenticate';
 import { classifyPromptMode } from './classify';
 import { executeOptimization } from './execute';
+import { normalizeLevel, normalizeMode } from '@/lib/levelMap';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_API_KEY_PREMIUM = process.env.GEMINI_API_KEY_PREMIUM;
@@ -121,19 +125,8 @@ export const POST = withMetrics(async (request: Request) => {
       // FIX #1: Await saveHistory so failures are surfaced and logged,
       // rather than silently dropped after the response is already sent.
       const saveHistory = async () => {
-        const rawLevel = body.level?.toUpperCase() ?? 'MEDIUM';
-        const LEVEL_MAP: Record<string, string> = {
-          'LIGHT': 'LIGHT', 'MEDIUM': 'MEDIUM', 'AGGRESSIVE': 'AGGRESSIVE', 'EXPERT': 'EXPERT',
-          'BASIC': 'BASIC', 'PROFESSIONAL': 'PROFESSIONAL', 
-          'STAFF+': 'STAFF+', 'STAFF_PLUS': 'STAFF+', 
-          'RESEARCH': 'RESEARCH', 
-          'PRODUCTION AUDIT': 'PRODUCTION AUDIT', 'PRODUCTION_AUDIT': 'PRODUCTION AUDIT'
-        };
-        const mappedLevel = LEVEL_MAP[rawLevel] || 'MEDIUM';
-        
-        let mappedMode = (resolvedMode as string)?.toUpperCase()?.replace('-', '_') ?? 'GENERAL';
-        const VALID_MODES = ['GENERAL', 'DEVELOPER', 'DESIGNER', 'MARKETING', 'RESEARCH', 'BUSINESS', 'CONTENT_CREATOR', 'STARTUP_FOUNDER'];
-        if (!VALID_MODES.includes(mappedMode)) mappedMode = 'GENERAL';
+        const mappedLevel = normalizeLevel(body.level);
+        const mappedMode = normalizeMode(resolvedMode);
 
         // Use supabaseAdmin instead of supabaseUserClient to bypass RLS
         await supabaseAdmin.from('PromptHistory').insert([{

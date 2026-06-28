@@ -22,9 +22,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid Access Token." }, { status: 401 });
     }
 
-    if (!user) {
-       return NextResponse.json({ error: "User not found" }, { status: 401 });
-    }
 
     const supabaseUserClient = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: `Bearer ${token}` } }

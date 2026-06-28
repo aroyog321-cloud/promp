@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js';
+import { normalizeLevel, normalizeMode } from '@/lib/levelMap';
 
 interface StreamContext {
   user: { id: string };
@@ -69,16 +70,8 @@ export function createOpenAIStream(response: Response, context?: StreamContext) 
       // or switch tabs before it can POST to /api/history itself.
       if (context && accumulatedText.trim() && !context.clientWillSync) {
         const responseTime = (Date.now() - startTime) / 1000;
-        const rawLevel = context.body.level?.toUpperCase() ?? 'MEDIUM';
-        const LEVEL_MAP: Record<string, string> = {
-          'LIGHT': 'LIGHT', 'MEDIUM': 'MEDIUM', 'AGGRESSIVE': 'AGGRESSIVE', 'EXPERT': 'EXPERT',
-          'BASIC': 'BASIC', 'PROFESSIONAL': 'PROFESSIONAL', 'STAFF+': 'STAFF_PLUS', 'RESEARCH': 'RESEARCH', 'PRODUCTION AUDIT': 'PRODUCTION_AUDIT'
-        };
-        const mappedLevel = LEVEL_MAP[rawLevel] || 'MEDIUM';
-
-        let mappedMode = context.body.mode?.toUpperCase()?.replace(/-/g, '_') ?? 'GENERAL';
-        const VALID_MODES = ['GENERAL', 'DEVELOPER', 'DESIGNER', 'MARKETING', 'RESEARCH', 'BUSINESS', 'CONTENT_CREATOR', 'STARTUP_FOUNDER'];
-        if (!VALID_MODES.includes(mappedMode)) mappedMode = 'GENERAL';
+        const mappedLevel = normalizeLevel(context.body.level);
+        const mappedMode = normalizeMode(context.body.mode);
 
         try {
           await context.supabase.from('PromptHistory').insert([{

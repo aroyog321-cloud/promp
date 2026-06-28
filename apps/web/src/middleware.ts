@@ -3,10 +3,9 @@ import type { NextRequest } from 'next/server';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 
-// Strict environment matrix per audit feedback
 if (process.env.NODE_ENV === 'production') {
   if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
-    console.warn('WARNING: UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN should be defined in production for rate limiting. Falling back to memory limiter.');
+    console.warn('WARNING: UPSTASH rate limit env vars missing. Falling back to memory limiter.');
   }
 }
 
@@ -19,11 +18,7 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
   });
 }
 
-// Basic in-memory rate limiter for dev fallback
-const rateLimitMap = new Map<string, { count: number, resetTime: number }>();
-
-// FIX #13: Periodically evict stale entries to prevent memory leaks in long-running instances
-// (Disabled in Edge middleware because Edge functions are short-lived and setInterval is unsupported)
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 
 async function checkRateLimit(ip: string): Promise<boolean> {
   if (ratelimit) {
@@ -34,50 +29,84 @@ async function checkRateLimit(ip: string): Promise<boolean> {
       console.warn('Upstash rate limit error, falling back to memory', e);
     }
   }
-
   const now = Date.now();
-  const windowMs = 60 * 1000; // 1 minute
-  const maxRequests = 30;     // 30 requests per minute
-
+  const windowMs = 60 * 1000;
+  const maxRequests = 30;
   const record = rateLimitMap.get(ip);
   if (!record || now > record.resetTime) {
     rateLimitMap.set(ip, { count: 1, resetTime: now + windowMs });
     return true;
   }
-
-  if (record.count >= maxRequests) {
-    return false;
-  }
-
+  if (record.count >= maxRequests) return false;
   record.count += 1;
   return true;
 }
 
+const ALLOWED_ORIGINS = new Set([
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'https://prompweb.vercel.app',
+  'https://prompweb.com',
+  'https://app.prompweb.com',
+]);
+
+function tryDecodeJwtSub(authHeader: string): string | null {
+  try {
+    const token = authHeader.replace('Bearer ', '');
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.sub ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function proxy(request: NextRequest) {
-  // Only apply to /api/* routes
   if (!request.nextUrl.pathname.startsWith('/api/')) {
     return NextResponse.next();
   }
 
-  // Rate Limiting
-  const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '127.0.0.1';
+  const ip =
+    request.headers.get('x-forwarded-for') ||
+    request.headers.get('x-real-ip') ||
+    '127.0.0.1';
+
   if (!(await checkRateLimit(ip))) {
-    return new NextResponse(JSON.stringify({ error: "Too Many Requests" }), { 
+    return new NextResponse(JSON.stringify({ error: 'Too Many Requests' }), {
       status: 429,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json' },
     });
   }
 
-  const origin = request.headers.get('origin') || '*';
-  
-  // The extension injects into any webpage (e.g. chatgpt.com) so the origin will be that webpage.
-  // We reflect the origin back since the API is protected by Bearer auth.
-  const allowedOrigin = origin;
+  if (
+    request.nextUrl.pathname === '/api/optimize' &&
+    process.env.UPSTASH_REDIS_REST_URL
+  ) {
+    const authHeader = request.headers.get('authorization') ?? '';
+    const jwtPayload = tryDecodeJwtSub(authHeader);
+    if (jwtPayload) {
+      const userRatelimit = new Ratelimit({
+        redis: Redis.fromEnv(),
+        limiter: Ratelimit.slidingWindow(60, '1 m'),
+        prefix: 'rl:user',
+      });
+      const { success: userOk } = await userRatelimit.limit(jwtPayload);
+      if (!userOk) {
+        return new NextResponse(JSON.stringify({ error: 'Rate limit exceeded' }), {
+          status: 429,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    }
+  }
 
-  // For localhost dev, always allow PNA so the extension can reach the local dev server from a public origin.
-  const isLocalhost = true; 
+  const origin = request.headers.get('origin') || '';
+  const isKnownOrigin = ALLOWED_ORIGINS.has(origin) || origin.startsWith('chrome-extension://');
+  const allowedOrigin = isKnownOrigin ? origin : (ALLOWED_ORIGINS.has(origin) ? origin : '*');
 
-  // Handle preflight
+  const isLocalDev =
+    origin === 'http://localhost:3000' ||
+    origin === 'http://127.0.0.1:3000';
+
   if (request.method === 'OPTIONS') {
     const headers: Record<string, string> = {
       'Access-Control-Allow-Origin': allowedOrigin,
@@ -86,17 +115,20 @@ export default async function proxy(request: NextRequest) {
       'Access-Control-Max-Age': '86400',
       'Access-Control-Allow-Credentials': 'true',
     };
-    if (isLocalhost) {
+    if (isLocalDev) {
       headers['Access-Control-Allow-Private-Network'] = 'true';
     }
     return new NextResponse(null, { status: 204, headers });
   }
 
-  // For actual requests, add headers to the response
   const response = NextResponse.next();
   response.headers.set('Access-Control-Allow-Origin', allowedOrigin);
   response.headers.set('Access-Control-Allow-Credentials', 'true');
-  if (isLocalhost) {
+  
+  const requestId = crypto.randomUUID();
+  response.headers.set('x-request-id', requestId);
+
+  if (isLocalDev) {
     response.headers.set('Access-Control-Allow-Private-Network', 'true');
   }
   return response;

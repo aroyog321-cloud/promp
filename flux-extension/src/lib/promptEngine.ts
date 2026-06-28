@@ -379,15 +379,40 @@ ${draftText}`;
           });
         }
 
-        // Handle non-streaming path via bgFetch
-        const res = await bgFetch(endpoint, {
-          method: "POST",
-          headers: { 
-            "Content-Type": "application/json", 
-            ...(config.accessToken ? { "Authorization": `Bearer ${config.accessToken}` } : (config.apiKey ? { "Authorization": `Bearer ${config.apiKey}` } : {})) 
-          },
-          body: JSON.stringify(payload)
-        });
+        // Handle non-streaming path via bgFetch with exponential backoff
+        let attempt = 0;
+        const maxAttempts = 3;
+        let res: Response | null = null;
+        
+        while (attempt < maxAttempts) {
+          attempt++;
+          try {
+            res = await bgFetch(endpoint, {
+              method: "POST",
+              headers: { 
+                "Content-Type": "application/json", 
+                ...(config.accessToken ? { "Authorization": `Bearer ${config.accessToken}` } : (config.apiKey ? { "Authorization": `Bearer ${config.apiKey}` } : {})) 
+              },
+              body: JSON.stringify(payload)
+            });
+            
+            if (!res.ok) {
+              const isRetryable = [429, 500, 502, 503, 504].includes(res.status);
+              if (isRetryable && attempt < maxAttempts) {
+                const delay = Math.pow(2, attempt) * 1000;
+                await new Promise(r => setTimeout(r, delay));
+                continue;
+              }
+            }
+            break; // Success or non-retryable error
+          } catch (e) {
+            if (attempt >= maxAttempts) throw e;
+            const delay = Math.pow(2, attempt) * 1000;
+            await new Promise(r => setTimeout(r, delay));
+          }
+        }
+
+        if (!res) throw new Error("Failed to fetch after retries");
 
         if (!res.ok) {
           let errorMsg = "API responded with " + res.status;

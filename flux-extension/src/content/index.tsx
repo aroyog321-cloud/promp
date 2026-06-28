@@ -113,16 +113,30 @@ const PromptlyApp: React.FC<{ platform: PlatformConfig }> = ({ platform }) => {
   };
 
   React.useEffect(() => {
-    getSettings().then(setSettings);
-    onSettingsChanged(setSettings);
+    let cancelled = false;
+
+    getSettings().then((s) => {
+      if (!cancelled) setSettings(s);
+    });
+
+    const cleanupSettings = onSettingsChanged((s) => {
+      if (!cancelled) setSettings(s);
+    });
+
     initHistoryDrain();
 
     chrome.storage.local.get(['hasSeenOnboarding'], (res) => {
+      if (cancelled) return;
       if (!res.hasSeenOnboarding) {
         setShowOnboarding(true);
         chrome.storage.local.set({ hasSeenOnboarding: true });
       }
     });
+
+    return () => {
+      cancelled = true;
+      cleanupSettings();
+    };
   }, []);
 
   // Drain pending history whenever we get a valid access token

@@ -1,7 +1,9 @@
-import { OptimizeRequest } from '@promptly/types';
+import { OptimizeRequest, PromptMode, RewriteLevel, PROMPT_MODES, REWRITE_LEVELS } from '@promptly/types';
 
-const VALID_MODES = new Set(['auto', 'general', 'developer', 'marketer', 'writer', 'analyst', 'startup-founder', 'researcher']);
-const VALID_LEVELS = new Set(['light', 'medium', 'aggressive', 'expert', 'Basic', 'Professional', 'Staff+', 'Research', 'Production Audit']);
+// Derive allowlists directly from the canonical type definitions.
+// This ensures validators and types are always in sync.
+const VALID_MODES = new Set<string>(PROMPT_MODES.map((m) => m.value));
+const VALID_LEVELS = new Set<string>(REWRITE_LEVELS.map((l) => l.value));
 
 export function validateOptimizeRequest(bodyText: string): { body: OptimizeRequest | null, error: string | null, status: number } {
   // FIX #4: Measure actual decoded byte length, not the client-supplied Content-Length header.

@@ -63,7 +63,7 @@ export default function HistoryPage() {
     try {
       let query = supabase
         .from('PromptHistory')
-        .select('*', { count: 'exact' })
+        .select('id, platformUsed, promptMode, rewriteLevel, createdAt, isStarred, responseTime, originalPrompt', { count: 'exact' })
         .eq('userId', user.id)
         .order('createdAt', { ascending: false })
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1)
@@ -88,28 +88,8 @@ export default function HistoryPage() {
       if (!session) { window.location.href = '/login'; return }
       setToken(session.access_token)
       setUser(session.user)
-
-      // Live updates: re-fetch when a new history row is inserted
-      const channel = supabase
-        .channel('prompt-history-changes')
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'PromptHistory',
-            filter: `userId=eq.${session.user.id}`,
-          },
-          () => {
-            setPage(0)
-            fetchHistory()
-          }
-        )
-        .subscribe()
-
-      return () => { supabase.removeChannel(channel) }
     })
-  }, [fetchHistory, supabase])
+  }, [supabase])
 
 
   useEffect(() => { 
@@ -121,13 +101,16 @@ export default function HistoryPage() {
   useEffect(() => {
     if (!user) return
     const channel = supabase
-      .channel('history-realtime')
+      .channel(`history-${user.id}`)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'PromptHistory',
         filter: `userId=eq.${user.id}`,
-      }, () => fetchHistory())
+      }, () => {
+        setPage(0)
+        fetchHistory()
+      })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [user, fetchHistory, supabase])

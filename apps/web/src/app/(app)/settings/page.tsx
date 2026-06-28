@@ -25,18 +25,24 @@ export default function SettingsPage() {
   const [token, setToken] = useState<string | null>(null)
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'connected' | 'no_extension'>('idle')
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const supabase = createClient()
+  const [supabase] = useState(() => createClient())
 
-  // Post the auth token to the extension via postMessage.
-  // authSync.ts (content script) listens for PROMPTLY_AUTH_TOKEN and saves
-  // it to chrome.storage.local, then replies with PROMPTLY_AUTH_SYNCED.
-  const syncTokenToExtension = (accessToken: string) => {
+  const syncTokenToExtension = async (accessToken: string) => {
     setSyncStatus('syncing')
+    const { data: { session } } = await supabase.auth.getSession();
     const timestamp = Date.now();
     const nonce = Math.random().toString(36).substring(2) + timestamp.toString(36);
-    window.postMessage({ type: 'PROMPTLY_AUTH_TOKEN', token: accessToken, timestamp, nonce }, window.location.origin)
+    
+    window.postMessage({ 
+      type: 'PROMPTLY_AUTH_TOKEN', 
+      token: accessToken,
+      refreshToken: session?.refresh_token ?? '',
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
+      supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
+      timestamp, 
+      nonce 
+    }, window.location.origin)
 
-    // Give the extension 3 seconds to acknowledge
     if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current)
     syncTimeoutRef.current = setTimeout(() => {
       setSyncStatus(prev => prev === 'syncing' ? 'no_extension' : prev)
