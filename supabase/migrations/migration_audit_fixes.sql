@@ -14,21 +14,21 @@ DECLARE
   v_allowed BOOLEAN := FALSE;
 BEGIN
   -- Atomic lock on the user's usage row
-  SELECT * INTO v_row FROM usage_stats WHERE id = p_user_id FOR UPDATE;
+  SELECT * INTO v_row FROM usage_stats WHERE id = p_user_id::uuid FOR UPDATE;
 
   -- Bootstrap row if missing
   IF NOT FOUND THEN
     INSERT INTO usage_stats (id, tier, total_requests_today, regenerations_today, last_reset_date)
-    VALUES (p_user_id, 'free', 0, 0, CURRENT_DATE)
+    VALUES (p_user_id::uuid, 'free', 0, 0, CURRENT_DATE)
     ON CONFLICT (id) DO NOTHING;
-    SELECT * INTO v_row FROM usage_stats WHERE id = p_user_id FOR UPDATE;
+    SELECT * INTO v_row FROM usage_stats WHERE id = p_user_id::uuid FOR UPDATE;
   END IF;
 
   -- Reset counters if new day
   IF v_row.last_reset_date < CURRENT_DATE THEN
     UPDATE usage_stats
     SET total_requests_today = 0, regenerations_today = 0, last_reset_date = CURRENT_DATE
-    WHERE id = p_user_id;
+    WHERE id = p_user_id::uuid;
     v_row.total_requests_today := 0;
     v_row.regenerations_today := 0;
   END IF;
@@ -39,14 +39,14 @@ BEGIN
 
   -- Check and increment
   IF p_is_regen THEN
-    v_allowed := v_row.regenerations_today < v_limit_regen;
+    v_allowed := COALESCE(v_row.regenerations_today, 0) < v_limit_regen;
     IF v_allowed THEN
-      UPDATE usage_stats SET regenerations_today = regenerations_today + 1 WHERE id = p_user_id;
+      UPDATE usage_stats SET regenerations_today = COALESCE(regenerations_today, 0) + 1 WHERE id = p_user_id::uuid;
     END IF;
   ELSE
-    v_allowed := v_row.total_requests_today < v_limit_total;
+    v_allowed := COALESCE(v_row.total_requests_today, 0) < v_limit_total;
     IF v_allowed THEN
-      UPDATE usage_stats SET total_requests_today = total_requests_today + 1 WHERE id = p_user_id;
+      UPDATE usage_stats SET total_requests_today = COALESCE(total_requests_today, 0) + 1 WHERE id = p_user_id::uuid;
     END IF;
   END IF;
 

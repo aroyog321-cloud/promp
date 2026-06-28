@@ -105,7 +105,7 @@ export default function DashboardPage() {
         if (statsError && statsError.code === 'PGRST116') {
           const { data: insertedStats } = await supabase
             .from('usage_stats')
-            .insert([{ id: currentUser.id, tier: 'expert' }])
+            .insert([{ id: currentUser.id, tier: 'expert', total_requests_today: 0, regenerations_today: 0 }])
             .select()
             .single()
           
@@ -371,7 +371,7 @@ export default function DashboardPage() {
               </Link>
             </div>
             
-            <div className="flex flex-col overflow-y-auto" ref={menuRef}>
+            <div className="flex flex-col overflow-y-auto custom-scrollbar" ref={menuRef}>
               {/* Copy toast */}
               <AnimatePresence>
                 {copied && (

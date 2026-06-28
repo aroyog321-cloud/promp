@@ -74,7 +74,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     fetch(message.url, {
       method: message.method || "GET",
       headers: message.headers || {},
-      body: message.body ? JSON.stringify(message.body) : undefined
+      body: message.body ? JSON.stringify(message.body) : undefined,
+      cache: "no-store"
     })
     .then(async (res) => {
       const ok = res.ok;

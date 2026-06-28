@@ -355,14 +355,27 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
         {error && (
           <div className="promptly-error" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, background: 'var(--accent-error)', color: '#fff', borderRadius: 6, fontSize: 13 }}>
             <div style={{ fontWeight: 600 }}>Optimization Failed</div>
-            <div style={{ opacity: 0.9 }}>{error}</div>
+            <div style={{ opacity: 0.9 }}>
+              {error.includes("Extension context invalidated") 
+                ? "The extension was updated or reloaded. Please refresh the page to continue."
+                : error}
+            </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-              <button 
-                onClick={() => handleOptimize()}
-                style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', padding: '4px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
-              >
-                Retry
-              </button>
+              {error.includes("Extension context invalidated") ? (
+                <button 
+                  onClick={() => window.location.reload()}
+                  style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', padding: '4px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
+                >
+                  Reload Page
+                </button>
+              ) : (
+                <button 
+                  onClick={() => handleOptimize()}
+                  style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', padding: '4px 8px', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 500 }}
+                >
+                  Retry
+                </button>
+              )}
             </div>
           </div>
         )}
