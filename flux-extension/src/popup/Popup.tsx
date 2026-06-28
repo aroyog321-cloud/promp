@@ -196,26 +196,26 @@ export const Popup: React.FC = () => {
                 <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-cyan-500/30 via-purple-500/30 to-transparent"></div>
                 <div className="flex justify-between items-end">
                   <p className="text-[12px] font-medium text-[var(--text-primary)]">
-                    {apiPlanData?.tier === 'expert' ? (
+                    {apiPlanData?.tier?.toLowerCase() === 'expert' ? (
                       <>{apiPlanData?.total_requests_today || 0} <span className="text-[var(--text-tertiary)]">optimizations (Unlimited)</span></>
                     ) : (
-                      <>{apiPlanData?.total_requests_today || 0} <span className="text-[var(--text-tertiary)]">/ {apiPlanData?.tier === 'pro' ? '25' : '10'} optimizations</span></>
+                      <>{apiPlanData?.total_requests_today || 0} <span className="text-[var(--text-tertiary)]">/ {apiPlanData?.tier?.toLowerCase() === 'pro' ? '25' : '10'} optimizations</span></>
                     )}
                   </p>
                 </div>
-                {apiPlanData?.tier !== 'expert' && (
+                {apiPlanData?.tier?.toLowerCase() !== 'expert' && (
                   <div className="h-1.5 w-full bg-[var(--surface-base)] rounded-full overflow-hidden border border-[var(--border-subtle)]">
-                    <div className="h-full bg-gradient-to-r from-cyan-500 to-purple-500 rounded-full" style={{ width: `${Math.min(100, Math.round(((apiPlanData?.total_requests_today || 0) / (apiPlanData?.tier === 'pro' ? 25 : 10)) * 100))}%` }}></div>
+                    <div className="h-full bg-gradient-to-r from-cyan-500 to-purple-500 rounded-full" style={{ width: `${Math.min(100, Math.round(((apiPlanData?.total_requests_today || 0) / (apiPlanData?.tier?.toLowerCase() === 'pro' ? 25 : 10)) * 100))}%` }}></div>
                   </div>
                 )}
-                {apiPlanData?.tier !== 'expert' && (
+                {apiPlanData?.tier?.toLowerCase() !== 'expert' && (
                   <button 
                     onClick={() => window.open(`${settings.apiBaseUrl}/dashboard`, "_blank")}
                     className="w-full mt-2 bg-[var(--text-primary)] text-[var(--surface-base)] font-semibold text-[11px] py-2 rounded-md hover:opacity-90 transition-opacity">
                     Upgrade Plan
                   </button>
                 )}
-                {apiPlanData?.tier === 'expert' && (
+                {apiPlanData?.tier?.toLowerCase() === 'expert' && (
                   <button 
                     onClick={() => window.open(`${settings.apiBaseUrl}/dashboard`, "_blank")}
                     className="w-full mt-2 bg-[var(--surface-floating)] border border-[var(--border-subtle)] text-[var(--text-secondary)] font-semibold text-[11px] py-2 rounded-md hover:text-[var(--text-primary)] transition-colors">
