@@ -1,5 +1,4 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { normalizeLevel, normalizeMode } from '@/lib/levelMap';
 
 interface StreamContext {
   user: { id: string };
@@ -14,16 +13,57 @@ interface StreamContext {
   clientWillSync?: boolean;
 }
 
+// Single source of truth for level → DB enum value mapping.
+// Must match exactly what was added to the RewriteLevel enum in Supabase.
+const LEVEL_TO_DB: Record<string, string> = {
+  // Original 4 values
+  LIGHT:              'LIGHT',
+  MEDIUM:             'MEDIUM',
+  AGGRESSIVE:         'AGGRESSIVE',
+  EXPERT:             'EXPERT',
+  // New values added by extend_rewrite_level_enum migration
+  BASIC:              'BASIC',
+  PROFESSIONAL:       'PROFESSIONAL',
+  'STAFF+':           'STAFF+',           // ← was incorrectly 'STAFF_PLUS'
+  STAFF_PLUS:         'STAFF+',           // normalise alternate form
+  RESEARCH:           'RESEARCH',
+  'PRODUCTION AUDIT': 'PRODUCTION AUDIT', // ← was incorrectly 'PRODUCTION_AUDIT'
+  PRODUCTION_AUDIT:   'PRODUCTION AUDIT', // normalise alternate form
+};
+
+// Must match PromptMode enum in Supabase exactly.
+const MODE_TO_DB: Record<string, string> = {
+  GENERAL:          'GENERAL',
+  DEVELOPER:        'DEVELOPER',
+  DESIGNER:         'DESIGNER',
+  MARKETING:        'MARKETING',
+  RESEARCH:         'RESEARCH',
+  BUSINESS:         'BUSINESS',
+  CONTENT_CREATOR:  'CONTENT_CREATOR',
+  'CONTENT-CREATOR':'CONTENT_CREATOR',
+  STARTUP_FOUNDER:  'STARTUP_FOUNDER',
+  'STARTUP-FOUNDER':'STARTUP_FOUNDER',
+};
+
+function toDbLevel(raw: string | undefined): string {
+  const key = (raw ?? '').toUpperCase();
+  return LEVEL_TO_DB[key] ?? LEVEL_TO_DB[key.replace(/ /g, '_')] ?? 'MEDIUM';
+}
+
+function toDbMode(raw: string | undefined): string {
+  const key = (raw ?? '').toUpperCase().replace(/-/g, '_');
+  return MODE_TO_DB[key] ?? 'GENERAL';
+}
+
 /**
  * Converts a raw Gemini SSE response into an OpenAI-compatible SSE stream.
- * On stream completion (flush), persists the full optimized text to PromptHistory
- * so history is always recorded server-side regardless of extension state.
+ * On stream completion (flush), persists the full optimized text to PromptHistory.
  */
 export function createOpenAIStream(response: Response, context?: StreamContext) {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
-  let accumulatedText = "";
-  let buffer = "";
+  let accumulatedText = '';
+  let buffer = '';
   const startTime = Date.now();
 
   const transformStream = new TransformStream({
@@ -31,72 +71,71 @@ export function createOpenAIStream(response: Response, context?: StreamContext) 
       const text = decoder.decode(chunk, { stream: true });
       buffer += text;
       const lines = buffer.split('\n');
-      buffer = lines.pop() ?? "";
+      buffer = lines.pop() ?? '';
 
       for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const dataStr = line.slice(6);
-          if (dataStr.trim() === '[DONE]') continue;
+        if (!line.startsWith('data: ')) continue;
+        const dataStr = line.slice(6);
+        if (dataStr.trim() === '[DONE]') continue;
 
-          try {
-            const data = JSON.parse(dataStr);
-            if (data.error) {
-              const errorChunk = {
-                choices: [{
-                  delta: { content: `\n[API Error: ${data.error.message || 'Unknown error during stream'}]` }
-                }]
-              };
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorChunk)}\n\n`));
-              continue;
-            }
-            if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
-              const content = data.candidates[0].content.parts[0].text;
-              accumulatedText += content;
-              const openAIChunk = {
-                choices: [{ delta: { content } }]
-              };
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(openAIChunk)}\n\n`));
-            }
-          } catch {
-            // Ignore parse errors for incomplete chunks
+        try {
+          const data = JSON.parse(dataStr);
+          if (data.error) {
+            const errorChunk = {
+              choices: [{ delta: { content: `\n[API Error: ${data.error.message ?? 'Unknown error during stream'}]` } }],
+            };
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorChunk)}\n\n`));
+            continue;
           }
+          const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (content) {
+            accumulatedText += content;
+            const openAIChunk = { choices: [{ delta: { content } }] };
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(openAIChunk)}\n\n`));
+          }
+        } catch {
+          // Ignore parse errors for incomplete chunks
         }
       }
     },
 
     async flush() {
-      // Stream complete — persist to PromptHistory server-side.
-      // This is the only reliable place: the extension may disconnect, crash,
-      // or switch tabs before it can POST to /api/history itself.
-      if (context && accumulatedText.trim() && !context.clientWillSync) {
-        const responseTime = (Date.now() - startTime) / 1000;
-        const mappedLevel = normalizeLevel(context.body.level);
-        const mappedMode = normalizeMode(context.body.mode);
+      if (!context || !accumulatedText.trim() || context.clientWillSync) return;
 
-        try {
-          await context.supabase.from('PromptHistory').insert([{
-            userId: context.user.id,
-            originalPrompt: context.body.text,
-            optimizedPrompt: accumulatedText.trim(),
-            platformUsed: context.platform || context.body.platform || 'api',
-            promptMode: mappedMode,
-            rewriteLevel: mappedLevel,
-            responseTime,
-          }]);
-        } catch (e) {
-          // Non-fatal — history write failure should not break the stream response
-          console.error('[Promptly] Failed to write PromptHistory on stream flush:', e);
+      const responseTime = (Date.now() - startTime) / 1000;
+      const dbLevel = toDbLevel(context.body.level);
+      const dbMode  = toDbMode(context.body.mode);
+
+      try {
+        const { error } = await context.supabase.from('PromptHistory').insert([{
+          userId:           context.user.id,
+          originalPrompt:  context.body.text,
+          optimizedPrompt: accumulatedText.trim(),
+          platformUsed:    context.platform || context.body.platform || 'api',
+          promptMode:      dbMode,
+          rewriteLevel:    dbLevel,
+          responseTime,
+        }]);
+
+        if (error) {
+          console.error('[Promptly] PromptHistory stream-flush insert failed:', error.message, { dbLevel, dbMode });
         }
+      } catch (e) {
+        console.error('[Promptly] PromptHistory stream-flush exception:', e);
       }
-    }
+    },
   });
 
   const readable = response.body?.pipeThrough(transformStream);
-  return readable ? new Response(readable, {
+  if (!readable) {
+    return new Response('Failed to start stream', { status: 500 });
+  }
+
+  return new Response(readable, {
     headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      "Connection": "keep-alive"
-    }
-  }) : new Response("Failed to start stream", { status: 500 });
+      'Content-Type':  'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection':    'keep-alive',
+    },
+  });
 }

@@ -176,10 +176,11 @@ export const POST = withMetrics(async (request: Request) => {
 
     captureError(isError ? error : new Error(String(error)), { route: '/api/optimize', duration, provider: 'gemini' });
 
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    const clientMessage =
+      process.env.NODE_ENV === 'production'
+        ? 'Optimization failed. Please try again.'
+        : isError ? error.message : String(error); // real error shown in dev
+    return NextResponse.json({ error: clientMessage }, { status: 500 });
   } finally {
     clearTimeout(routeTimeout!);
   }
