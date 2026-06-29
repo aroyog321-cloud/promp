@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
+import { ALLOWED_ORIGINS_SET } from '@/lib/allowedOrigins';
 
 if (process.env.NODE_ENV === 'production') {
   if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
@@ -20,6 +21,18 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
 
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 
+/**
+ * Lazily sweeps expired entries from the in-memory rate-limit map.
+ * Only runs when the map exceeds 500 entries to keep the overhead minimal.
+ */
+function sweepExpiredRateLimitEntries(): void {
+  if (rateLimitMap.size < 500) return;
+  const now = Date.now();
+  for (const [key, record] of rateLimitMap.entries()) {
+    if (now > record.resetTime) rateLimitMap.delete(key);
+  }
+}
+
 async function checkRateLimit(ip: string): Promise<boolean> {
   if (ratelimit) {
     try {
@@ -29,6 +42,7 @@ async function checkRateLimit(ip: string): Promise<boolean> {
       console.warn('Upstash rate limit error, falling back to memory', e);
     }
   }
+  sweepExpiredRateLimitEntries();
   const now = Date.now();
   const windowMs = 60 * 1000;
   const maxRequests = 30;
@@ -42,14 +56,19 @@ async function checkRateLimit(ip: string): Promise<boolean> {
   return true;
 }
 
-const ALLOWED_ORIGINS = new Set([
+// Dev origins are allowed in addition to the shared production list
+const DEV_ORIGINS = new Set([
   'http://localhost:3000',
   'http://127.0.0.1:3000',
-  'https://prompweb.vercel.app',
-  'https://prompweb.com',
-  'https://app.prompweb.com',
 ]);
 
+/**
+ * Decodes the JWT sub-claim WITHOUT verifying the signature.
+ * This is intentionally used ONLY for rate-limit key derivation — NOT for auth.
+ * Authorization is always done server-side via Supabase's auth.getUser().
+ * A malicious actor can forge the sub-claim to target a different rate-limit
+ * bucket, but cannot gain access to other users' data this way.
+ */
 function tryDecodeJwtSub(authHeader: string): string | null {
   try {
     const token = authHeader.replace('Bearer ', '');
@@ -100,14 +119,22 @@ export default async function proxy(request: NextRequest) {
   }
 
   const origin = request.headers.get('origin') || '';
-  const isKnownOrigin = ALLOWED_ORIGINS.has(origin) || origin.startsWith('chrome-extension://');
-  const allowedOrigin = isKnownOrigin ? origin : (ALLOWED_ORIGINS.has(origin) ? origin : '*');
+  const isKnownOrigin =
+    ALLOWED_ORIGINS_SET.has(origin) ||
+    DEV_ORIGINS.has(origin) ||
+    origin.startsWith('chrome-extension://');
 
-  const isLocalDev =
-    origin === 'http://localhost:3000' ||
-    origin === 'http://127.0.0.1:3000';
+  // FIXED: Never fall back to '*'. Return null for unknown origins.
+  // The browser will reject cross-origin requests when no CORS header is set.
+  const allowedOrigin: string | null = isKnownOrigin ? origin : null;
+
+  const isLocalDev = DEV_ORIGINS.has(origin);
 
   if (request.method === 'OPTIONS') {
+    // Reject preflight from unknown origins immediately
+    if (!allowedOrigin) {
+      return new NextResponse(null, { status: 403 });
+    }
     const headers: Record<string, string> = {
       'Access-Control-Allow-Origin': allowedOrigin,
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
@@ -115,16 +142,17 @@ export default async function proxy(request: NextRequest) {
       'Access-Control-Max-Age': '86400',
       'Access-Control-Allow-Credentials': 'true',
     };
-    if (isLocalDev) {
-      headers['Access-Control-Allow-Private-Network'] = 'true';
-    }
+    if (isLocalDev) headers['Access-Control-Allow-Private-Network'] = 'true';
     return new NextResponse(null, { status: 204, headers });
   }
 
   const response = NextResponse.next();
-  response.headers.set('Access-Control-Allow-Origin', allowedOrigin);
-  response.headers.set('Access-Control-Allow-Credentials', 'true');
-  
+  // Only set CORS headers for known origins — unknown origins get no header (browser blocks them)
+  if (allowedOrigin) {
+    response.headers.set('Access-Control-Allow-Origin', allowedOrigin);
+    response.headers.set('Access-Control-Allow-Credentials', 'true');
+  }
+
   const requestId = crypto.randomUUID();
   response.headers.set('x-request-id', requestId);
 

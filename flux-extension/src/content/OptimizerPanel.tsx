@@ -49,6 +49,9 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
   const [refinementInput, setRefinementInput] = useState("");
   
   const abortControllerRef = useRef<AbortController | null>(null);
+  // Suppress the first mousedown after panel mount — it's the click that opened the panel.
+  // Without this guard, the click that opens the panel also immediately closes it via handleClickOutside.
+  const ignoreNextPointerDown = useRef(true);
   
   const panelRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -62,7 +65,19 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (panelRef.current && !e.composedPath().includes(panelRef.current)) onClose();
+      // Skip the first mousedown after panel mount (the one that opened the panel)
+      if (ignoreNextPointerDown.current) {
+        ignoreNextPointerDown.current = false;
+        return;
+      }
+      const path = e.composedPath();
+      if (panelRef.current && !path.includes(panelRef.current)) {
+        // Guard: if the click is on the shadow DOM host (i.e., the orb),
+        // let the orb's own onClick handler manage open/close state.
+        const shadowHost = document.getElementById('promptly-prompt-optimizer-root');
+        if (shadowHost && path.includes(shadowHost)) return;
+        onClose();
+      }
     };
     
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -113,10 +128,14 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
 
   const hasAutoOptimized = useRef(false);
   useEffect(() => {
-    if (settings && text.trim() && !hasAutoOptimized.current) {
+    // Use `initialText` (stable prop) instead of `text` (mutable state).
+    // If we used `text`, a storage event firing after the user clears the input
+    // could trigger auto-optimize with an empty string, or miss it altogether.
+    if (settings && initialText.trim() && !hasAutoOptimized.current) {
       hasAutoOptimized.current = true;
       handleOptimize();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings]);
 
   const handleOptimize = async (overrideMode?: PromptMode, overrideLevel?: RewriteLevel, overrideStyle?: PromptStyle, refinement?: string) => {

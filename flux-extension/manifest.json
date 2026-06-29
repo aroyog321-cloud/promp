@@ -28,6 +28,7 @@
     "https://gemini.google.com/*",
     "https://claude.ai/*",
     "https://www.perplexity.ai/*",
+    "https://perplexity.ai/*",
     "https://grok.com/*",
     "https://chat.deepseek.com/*",
     "http://localhost:3000/*",
@@ -43,6 +44,7 @@
         "https://gemini.google.com/*",
         "https://claude.ai/*",
         "https://www.perplexity.ai/*",
+        "https://perplexity.ai/*",
         "https://grok.com/*",
         "https://chat.deepseek.com/*"
       ],

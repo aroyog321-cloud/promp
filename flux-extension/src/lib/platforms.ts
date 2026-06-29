@@ -114,23 +114,47 @@ export function writeInputText(el: HTMLElement, text: string): void {
     return;
   }
 
-  // contenteditable: clear then insert via execCommand for max compatibility
-  el.focus();
-  // Normalize consecutive newlines for contenteditable elements. Modern rich-text editors
-  // (like Lexical on ChatGPT or ProseMirror on Claude) treat \n as a block/paragraph break.
-  // Double newlines (\n\n) get doubled or expanded into massive blank paragraph gaps.
+  // contenteditable: normalize newlines for Lexical / ProseMirror block model.
+  // Double newlines produce massive paragraph gaps in these editors.
   const normalizedText = text.replace(/\r\n/g, "\n").replace(/\n\n+/g, "\n");
 
-  document.execCommand("selectAll", false);
-  document.execCommand("delete", false);
-  document.execCommand("insertText", false, normalizedText);
-  el.dispatchEvent(new Event("input", { bubbles: true }));
-
-  // move cursor to end
+  // Step 1: Select all existing content
+  const sel = window.getSelection();
   const range = document.createRange();
   range.selectNodeContents(el);
-  range.collapse(false);
-  const selection = window.getSelection();
-  selection?.removeAllRanges();
-  selection?.addRange(range);
+  sel?.removeAllRanges();
+  sel?.addRange(range);
+
+  // Step 2: Try modern InputEvent API (React 18 / Lexical / ProseMirror listen to 'beforeinput')
+  // These frameworks handle 'beforeinput' to keep their virtual DOM in sync.
+  let handled = false;
+  try {
+    const contentBefore = el.textContent;
+    const beforeInput = new InputEvent('beforeinput', {
+      bubbles: true,
+      cancelable: true,
+      inputType: 'insertText',
+      data: normalizedText,
+    });
+    el.dispatchEvent(beforeInput);
+    // If the framework handled it, the content will have changed
+    handled = el.textContent !== contentBefore;
+  } catch (_) { /* InputEvent not supported — fall through to execCommand */ }
+
+  // Step 3: Fallback to execCommand for plain contenteditable elements
+  // execCommand('insertText') is in "Frozen Legacy" status — not scheduled for removal
+  // in Chromium as of 2026, but this branch should be removed when a standard replaces it.
+  if (!handled) {
+    document.execCommand("selectAll", false);
+    document.execCommand("insertText", false, normalizedText);
+  }
+
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+
+  // Move cursor to end
+  const endRange = document.createRange();
+  endRange.selectNodeContents(el);
+  endRange.collapse(false);
+  sel?.removeAllRanges();
+  sel?.addRange(endRange);
 }

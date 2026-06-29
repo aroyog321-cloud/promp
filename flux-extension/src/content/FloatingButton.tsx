@@ -48,11 +48,11 @@ export const FloatingButton: React.FC<FloatingButtonProps> = ({
       clickTimeoutRef.current = null;
       onDoubleClick();
     } else {
-      // Start standard single click timer window (250ms)
+      // Start standard single click timer window (300ms — more forgiving on slower devices)
       clickTimeoutRef.current = window.setTimeout(() => {
         clickTimeoutRef.current = null;
         onClick();
-      }, 250);
+      }, 300);
     }
   };
 

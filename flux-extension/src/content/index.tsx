@@ -186,17 +186,40 @@ const PromptlyApp: React.FC<{ platform: PlatformConfig }> = ({ platform }) => {
       updateTimeout = window.setTimeout(() => {
         if (animationFrameId) window.cancelAnimationFrame(animationFrameId);
         animationFrameId = window.requestAnimationFrame(update);
-      }, 50);
+      }, 100); // Increased from 50ms — reduces thrashing on SPA route changes
     };
 
     update();
-    const observer = new MutationObserver(scheduleUpdate);
+
+    let resizeObserver: ResizeObserver | null = null;
+    const anchorEl = findAnchorElement(platform);
+    if (anchorEl && typeof ResizeObserver !== 'undefined') {
+      // ResizeObserver on the anchor element handles positional updates without
+      // triggering a feedback loop (it doesn't fire on shadow DOM mutations).
+      resizeObserver = new ResizeObserver(scheduleUpdate);
+      resizeObserver.observe(anchorEl);
+    }
+
+    // MutationObserver watches ONLY for the input appearing/disappearing (SPA navigation).
+    // It does NOT handle ongoing positional tracking — that's ResizeObserver's job.
+    // This prevents the feedback loop: React re-render → shadow DOM mutation → observer fires → re-render.
+    const inputSelector = platform.inputSelectors[0];
+    const observer = new MutationObserver((mutations) => {
+      const relevant = mutations.some(m =>
+        [...m.addedNodes, ...m.removedNodes].some(
+          n => n instanceof Element &&
+               (n.matches(inputSelector) || n.querySelector?.(inputSelector))
+        )
+      );
+      if (relevant || !inputRef.current) scheduleUpdate();
+    });
     observer.observe(document.body, { childList: true, subtree: true });
     window.addEventListener("resize", scheduleUpdate);
     window.addEventListener("scroll", scheduleUpdate, true);
 
     return () => {
       observer.disconnect();
+      resizeObserver?.disconnect();
       window.removeEventListener("resize", scheduleUpdate);
       window.removeEventListener("scroll", scheduleUpdate, true);
       if (updateTimeout) window.clearTimeout(updateTimeout);
