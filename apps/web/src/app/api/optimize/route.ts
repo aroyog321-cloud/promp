@@ -17,8 +17,8 @@ import { classifyPromptMode } from './classify';
 import { executeOptimization } from './execute';
 import { normalizeLevel, normalizeMode } from '@/lib/levelMap';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_API_KEY_PREMIUM = process.env.GEMINI_API_KEY_PREMIUM;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY?.startsWith('REPLACE_') ? '' : process.env.GEMINI_API_KEY;
+const GEMINI_API_KEY_PREMIUM = process.env.GEMINI_API_KEY_PREMIUM?.startsWith('REPLACE_') ? '' : process.env.GEMINI_API_KEY_PREMIUM;
 
 export const POST = withMetrics(async (request: Request) => {
   const routeController = new AbortController();
