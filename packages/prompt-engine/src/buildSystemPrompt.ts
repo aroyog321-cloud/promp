@@ -83,51 +83,10 @@ const STYLE_RULES: Record<string, string> = {
 * Focus purely on clarity and instructional accuracy.`
 };
 
-// Domain-specific rules injected based on the auto-detected category
-// (category selector was removed from UI — now auto-detected server-side via classifyPromptMode)
-const DOMAIN_CONTEXT: Partial<Record<PromptMode, string>> = {
-  "developer": `Domain: Software Engineering / Tech
-* Frame the prompt for an experienced software engineer.
-* Use technical precision: mention languages, frameworks, patterns, or system design where relevant.
-* Encourage structured reasoning: complexity, trade-offs, edge cases, and production-readiness.`,
 
-  "designer": `Domain: Product Design / UX
-* Frame the prompt for a senior product or UX designer.
-* Focus on user empathy, design systems, accessibility, and visual hierarchy.
-* Encourage output that references design principles, user flows, or Figma/prototyping considerations.`,
-
-  "marketing": `Domain: Marketing / Growth
-* Frame the prompt for a growth or marketing professional.
-* Focus on audience targeting, conversion, messaging hierarchy, and channel strategy.
-* Encourage output that references metrics like CTR, ROAS, CAC, or brand voice.`,
-
-  "research": `Domain: Research / Analysis
-* Frame the prompt for a rigorous analyst or researcher.
-* Require evidence-based structure: methodology, data sources, assumptions flagged.
-* Encourage systematic breakdowns with references to credible sources or prior art.`,
-
-  "business": `Domain: Business / Strategy
-* Frame the prompt for a senior business strategist or operator.
-* Focus on ROI, stakeholder alignment, risk assessment, and execution planning.
-* Encourage structured output: executive summaries, recommendations, and trade-off analysis.`,
-
-  "content-creator": `Domain: Content Creation / Writing
-* Frame the prompt for a professional writer, editor, or content strategist.
-* Focus on narrative structure, audience engagement, hook crafting, and tone consistency.
-* Encourage output formats like blog posts, newsletters, scripts, or social captions.`,
-
-  "startup-founder": `Domain: Startup / Entrepreneurship
-* Frame the prompt for a founder or early-stage entrepreneur.
-* Focus on go-to-market strategy, lean validation, pitch clarity, and resource constraints.
-* Encourage output that references MVPs, investor narratives, product-market fit, or growth loops.`,
-
-  "general": `Domain: General
-* Frame the prompt for a knowledgeable generalist.
-* Preserve broad applicability — do not over-specialize into a single domain.`
-};
 
 export async function buildSystemPrompt(
-  mode: PromptMode,
+  _mode: PromptMode,
   level: RewriteLevel,
   platform?: string,
   style: string = "Neutral",
@@ -146,9 +105,6 @@ export async function buildSystemPrompt(
 
   const contextStr = contextText?.trim() || "None";
 
-  // Inject domain rules based on auto-detected category (replaces the removed UI selector)
-  const domainBlock = DOMAIN_CONTEXT[mode] || DOMAIN_CONTEXT["general"] || "";
-
   return `You are an elite Prompt Optimization Engine.
 
 Your job is NOT to answer the user's request.
@@ -160,8 +116,6 @@ Style: ${matchedStyleKey}
 Target Length: ${wordLimit}
 Context Memory:
 ${contextStr}
-
-${domainBlock}
 
 Generate an optimized prompt from the user's request.
 
