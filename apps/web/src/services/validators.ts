@@ -54,7 +54,7 @@ export function validateOptimizeRequest(
     return { body: null, error: 'Missing required fields: text, mode, level', status: 400 };
   }
 
-  if (!VALID_MODES.has(body.mode)) {
+  if (!body.mode || !VALID_MODES.has(body.mode.toLowerCase())) {
     return {
       body: null,
       error: `Invalid mode '${body.mode}'. Valid: ${[...VALID_MODES].join(', ')}`,
@@ -62,13 +62,17 @@ export function validateOptimizeRequest(
     };
   }
 
-  if (!VALID_LEVELS.has(body.level)) {
+  if (!body.level || !Array.from(VALID_LEVELS).map(l => l.toLowerCase()).includes(body.level.toLowerCase())) {
     return {
       body: null,
       error: `Invalid level '${body.level}'. Valid: ${[...VALID_LEVELS].join(', ')}`,
       status: 400,
     };
   }
+
+  // Normalize level casing to ensure downstream code gets exact expected keys
+  const exactLevelMatch = Array.from(VALID_LEVELS).find(l => l.toLowerCase() === body.level.toLowerCase());
+  if (exactLevelMatch) body.level = exactLevelMatch as RewriteLevel;
 
   // Strip control characters
   body.text = body.text.replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '').trim();
