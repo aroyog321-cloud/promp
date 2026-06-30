@@ -50,26 +50,39 @@ export async function checkQuotaAndTier(
 
 export async function getDynamicApiKey(supabaseAdmin: SupabaseClient, defaultKey: string | undefined) {
   try {
-    const { data: settingData } = await supabaseAdmin
+    // 1. Find which key name is currently active
+    const { data: settingData, error: settingError } = await supabaseAdmin
       .from('SystemSetting')
       .select('value')
       .eq('key', 'optimize_key')
       .single();
-    
-    if (settingData && settingData.value) {
-      const { data: keyData } = await supabaseAdmin
-        .from('ApiKey')
-        .select('secret')
-        .eq('name', settingData.value)
-        .eq('enabled', true)
-        .single();
-        
-      if (keyData && keyData.secret) {
-        return keyData.secret;
-      }
+
+    if (settingError || !settingData?.value) {
+      console.warn('[Proenpt] SystemSetting "optimize_key" not found — falling back to GEMINI_API_KEY env var.');
+      return defaultKey;
     }
+
+    // 2. Fetch the actual secret for that key name
+    const { data: keyData, error: keyError } = await supabaseAdmin
+      .from('ApiKey')
+      .select('secret')
+      .eq('name', settingData.value)
+      .eq('enabled', true)
+      .single();
+
+    if (keyError || !keyData?.secret) {
+      console.warn(
+        `[Proenpt] ApiKey "${settingData.value}" not found or disabled in Supabase — ` +
+        'falling back to GEMINI_API_KEY env var. ' +
+        'To fix: run the UPDATE command in Supabase SQL editor with your new key.'
+      );
+      return defaultKey;
+    }
+
+    // Success — key loaded from Supabase
+    return keyData.secret;
   } catch (e) {
-    console.error("Failed to fetch dynamic API key:", e);
+    console.error('[Proenpt] Unexpected error fetching dynamic API key from Supabase:', e);
   }
 
   return defaultKey;
