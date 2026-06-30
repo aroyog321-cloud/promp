@@ -21,15 +21,25 @@ export const MODE_MAP: Record<string, string> = {
   RESEARCH:         'RESEARCH',
   BUSINESS:         'BUSINESS',
   CONTENT_CREATOR:  'CONTENT_CREATOR',
+  'CONTENT-CREATOR':'CONTENT_CREATOR',  // from classify.ts lowercase output
   STARTUP_FOUNDER:  'STARTUP_FOUNDER',
+  'STARTUP-FOUNDER':'STARTUP_FOUNDER',  // from classify.ts lowercase output
 };
 
 export function normalizeLevel(raw: string | undefined): string {
-  const key = (raw ?? '').toUpperCase().replace(/-/g, '_').replace(/ /g, '_');
-  return LEVEL_MAP[raw?.toUpperCase() ?? ''] ?? LEVEL_MAP[key] ?? 'MEDIUM';
+  if (!raw) return 'MEDIUM';
+  // Try exact uppercase match first (e.g. 'STAFF+', 'PRODUCTION AUDIT')
+  const upper = raw.toUpperCase();
+  if (LEVEL_MAP[upper]) return LEVEL_MAP[upper];
+  // Try replacing spaces/hyphens with underscores as fallback
+  const key = upper.replace(/-/g, '_').replace(/ /g, '_');
+  return LEVEL_MAP[key] ?? 'MEDIUM';
 }
 
 export function normalizeMode(raw: string | undefined): string {
-  const key = (raw ?? '').toUpperCase().replace(/-/g, '_');
+  if (!raw) return 'GENERAL';
+  // Normalize: uppercase and replace hyphens with underscores
+  // This handles both classify.ts output ('content-creator') and direct DB values ('CONTENT_CREATOR')
+  const key = raw.toUpperCase().replace(/-/g, '_');
   return MODE_MAP[key] ?? 'GENERAL';
 }

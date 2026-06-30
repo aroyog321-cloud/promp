@@ -122,15 +122,8 @@ export const POST = withMetrics(async (request: Request) => {
         return NextResponse.json({ error: "Empty response from AI" }, { status: 502 });
       }
 
-      // Extract just the generated prompt (everything before the '---' footer line)
-      const extractedPrompt = (() => {
-        const parts = optimizedText.split(/\n---\n/);
-        if (parts.length > 1) return parts[0].trim();
-        // Fallback: old format with ## Improved Prompt header
-        const match = optimizedText.match(/## Improved Prompt\s+([\s\S]*?)(?=## Why This Version Is Better|---\s*Prompt Strength|$)/i);
-        if (match?.[1]) return match[1].trim();
-        return optimizedText;
-      })();
+      // No footer to strip — the AI no longer outputs 'Prompt Strength' footer
+      const extractedPrompt = optimizedText;
 
       const responseTime = (Date.now() - startTime) / 1000;
 
