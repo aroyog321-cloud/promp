@@ -1,43 +1,125 @@
 import { PromptMode, RewriteLevel } from "@promptly/types";
 
+// Word limits based on intensity
+const LIMITS: Record<RewriteLevel, string> = {
+  "Basic": "under 100 words",
+  "Professional": "150–250 words",
+  "Staff+": "250–400 words",
+  "Research": "350–500 words",
+  "Production Audit": "500–700 words"
+};
+
+const INTENSITY_RULES: Record<RewriteLevel, string> = {
+  "Basic": `Basic Optimization Rules:
+* Perform grammar cleanup and formatting improvements.
+* Preserve the user's original wording and intent as much as possible.
+* Do not introduce new personas, roles, or complex frameworks.
+* Keep the prompt extremely simple and direct.`,
+  
+  "Professional": `Professional Optimization Rules:
+* Convert the request into a structured, business-grade prompt.
+* Define the objective clearly.
+* Organize instructions into logical sections.
+* Include expected output characteristics where beneficial.
+* Add concise requirements and success expectations.
+* Avoid excessive frameworks or unnecessary complexity.`,
+
+  "Staff+": `Staff+ Optimization Rules:
+* Restructure the request into a highly optimized, context-rich prompt.
+* Assign a specific expert role or persona to the AI.
+* Add critical context and improve instructions for edge cases.
+* Define strict constraints and output formats.
+* Require step-by-step reasoning before the final answer.`,
+
+  "Research": `Research Optimization Rules:
+* Rebuild the prompt for academic or deep analytical rigor.
+* Define specific methodology and evidence/source requirements.
+* Break the task into numbered sub-steps for systematic analysis.
+* Require the AI to flag assumptions and uncertainty.
+* Enforce strict formatting and data presentation rules.`,
+
+  "Production Audit": `Production Audit Optimization Rules:
+* Reconstruct the prompt into an exhaustive, expert-level auditing framework.
+* Assign a precise role (e.g., Principal Engineer, Chief Auditor).
+* Define exhaustive success criteria, edge cases, and anti-patterns to avoid.
+* Include a mandatory self-check or scoring rubric step.
+* Ensure maximum rigor and constraint enforcement.`
+};
+
+const STYLE_RULES: Record<string, string> = {
+  "Direct": `Direct Style Rules:
+* Make the prompt concise and action-first.
+* Remove all fluff, politeness, and conversational phrasing.
+* Use imperative verbs and strict instructions.`,
+  
+  "Formal": `Formal Style Rules:
+* Use professional and polished language.
+* Maintain neutral and authoritative wording.
+* Avoid conversational phrasing.
+* Prefer clarity and precision over creativity.`,
+  
+  "Creative": `Creative Style Rules:
+* Use expressive, imaginative, and engaging language.
+* Encourage the AI to think outside the box and take creative risks.
+* Prioritize resonance, metaphor, and sensory language.`,
+
+  "Analytical": `Analytical Style Rules:
+* Focus strictly on stepwise reasoning and logical deduction.
+* Use precise, specification-driven language.
+* Prioritize objective analysis and metric-based evaluation.`,
+  
+  "Neutral": `Neutral Style Rules:
+* Maintain a balanced, objective tone.
+* Focus purely on clarity and instructional accuracy.`
+};
+
 export async function buildSystemPrompt(
   _mode: PromptMode,
   level: RewriteLevel,
-  platform?: string
+  platform?: string,
+  style: string = "Formal",
+  contextText?: string
 ): Promise<string> {
 
-  // Platform-aware formatting note
-  let platformNote = "";
-  if (platform?.includes("claude.ai")) {
-    platformNote = "\n\nPlatform note: This prompt will be used on Claude — use XML-style tags inside sections when helpful (e.g. <task>, <constraints>).";
-  } else if (platform?.includes("chatgpt.com") || platform?.includes("openai.com")) {
-    platformNote = "\n\nPlatform note: This prompt will be used on ChatGPT — use Markdown headers (##) and bulleted lists inside the body.";
-  } else if (platform?.includes("gemini")) {
-    platformNote = "\n\nPlatform note: This prompt will be used on Gemini — use numbered steps for multi-stage tasks.";
-  }
+  const wordLimit = LIMITS[level] || LIMITS["Professional"];
+  const intensityRules = INTENSITY_RULES[level] || INTENSITY_RULES["Professional"];
+  
+  // Try to match the exact style, or fallback to Neutral
+  const matchedStyle = Object.keys(STYLE_RULES).find(k => k.toLowerCase() === style.toLowerCase()) || "Neutral";
+  const styleRules = STYLE_RULES[matchedStyle];
 
-  return `You are a world-class Prompt Engineer. Your only job is to take a user's raw text and transform it into a high-quality AI prompt that will produce the best possible answer.
+  const contextStr = contextText ? contextText : "None";
 
-## CORE RULE
-Do NOT answer the user's question. ONLY write a prompt someone would use to get the best answer from an AI.
+  return `You are an elite Prompt Optimization Engine.
 
-## OUTPUT ADAPTATION
-The user will provide you with an "Intensity level", a "Style of the prompt", and a "Prompt generation limit of text".
-You MUST strictly obey these constraints:
+Your job is NOT to answer the user's request.
+Your job is ONLY to transform the user's input into a higher quality prompt.
 
-1. **Basic Intensity**: Output a simple, direct prompt. Do NOT add complex personas, roles, or long lists of requirements. Keep it conversational but clear.
-2. **Professional Intensity**: Add a specific expert role (e.g., "Act as a Senior Engineer"), 3-5 clear bulleted requirements, and a defined output format.
-3. **Staff+ / Research / Production Audit Intensity**: Build a highly structured prompt. Include failure modes, constraints, edge cases to avoid, and step-by-step reasoning instructions. Use headers like "Role", "Task", "Requirements", and "Output Format".
+SETTINGS:
+Intensity: ${level}
+Style: ${matchedStyle}
+Target Length: ${wordLimit}
+Context Memory:
+${contextStr}
 
-## ADDITIONAL RULES
-1. If the user provides a "Context memory", you MUST weave it into the prompt (e.g., mention their company, industry, or role).
-2. Never exceed the word limit specified in the user's input.
-3. Do NOT include meta-commentary like "Here is your prompt". Output ONLY the prompt itself.${platformNote}
+Generate an optimized prompt from the user's request.
 
-## AFTER THE GENERATED PROMPT
-Add exactly this footer — nothing else:
+Requirements:
+* Preserve the user's original objective.
+* Improve clarity, structure, and precision.
+* Remove ambiguity and vague instructions.
+* Add useful constraints only when strongly implied.
+* Keep the prompt concise and execution-focused.
+* Do not introduce unsupported assumptions or facts.
+* Respect the selected target length.
+* Use context memory only if directly relevant.
 
----
-Prompt Strength: [Original score]/10 → [Improved score]/10
-`;
+${intensityRules}
+
+${styleRules}
+
+Output Rules:
+* Return ONLY the final optimized prompt.
+* Do not explain decisions.
+* Do not include notes, labels, or commentary.`;
 }

@@ -88,7 +88,15 @@ export const POST = withMetrics(async (request: Request) => {
 
     const resolvedMode = (classifiedMode ? classifiedMode : body.mode) as PromptMode;
 
-    const systemPrompt = await buildSystemPrompt(resolvedMode, body.level, platform);
+    let contextText = "";
+    if (body.context && typeof body.context === 'object') {
+      contextText = Object.entries(body.context)
+        .filter(([_, v]) => v)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join("\n");
+    }
+
+    const systemPrompt = await buildSystemPrompt(resolvedMode, body.level, platform, body.style, contextText);
     const userPrompt = buildUserPrompt(body);
 
     const activeApiKey = FINAL_API_KEY;
