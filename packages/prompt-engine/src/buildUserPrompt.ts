@@ -1,13 +1,9 @@
 import { OptimizeRequest } from "@promptly/types";
-import { STYLE_GUIDELINES } from "./modeRecipes";
-import { LEVEL_CONFIGS } from "./levelConfigs";
-import { contextLine, stripPoliteness, detectIntentSignals } from "./utils";
+import { contextLine, stripPoliteness } from "./utils";
 
 export function buildUserPrompt(req: OptimizeRequest): string {
-  const { text, level, style, context, refinement, previousPrompt } = req;
+  const { text, context, refinement, previousPrompt } = req;
   const rawText = stripPoliteness(text.trim());
-  const signals = detectIntentSignals(rawText);
-  const levelConfig = LEVEL_CONFIGS[level];
 
   // ── REFINEMENT FLOW ────────────────────────────────────────────────────────
   if (previousPrompt) {
@@ -30,37 +26,12 @@ Apply the feedback to improve the current prompt. Output only the revised prompt
   }
 
   // ── STANDARD FLOW ─────────────────────────────────────────────────────────
-  // Context memory: prominently surfaced so the system prompt can reference it
+  let userPrompt = `Convert this into a prompt: "${rawText}"`;
+
+  // Context memory — preserved if enabled by the user
   const contextBlock = context ? contextLine(context) : "";
-  const styleGuideline = STYLE_GUIDELINES[style] || STYLE_GUIDELINES.neutral;
-  const depth = levelConfig?.reasoningDepth ?? 3;
-
-  let userPrompt = `<user_input>
-${rawText}
-</user_input>
-
-INTENSITY: ${level} (reasoning depth ${depth}/5)
-STYLE TARGET: ${styleGuideline}
-`;
-
-  // Context memory — promoted to its own block with explicit instructions
   if (contextBlock) {
-    userPrompt += `
-USER CONTEXT PROFILE (MUST be woven into the generated prompt):
-${contextBlock}
-At least 2 requirements in the generated prompt must directly reference this context.
-`;
-  }
-
-  // Intent signals — help calibrate output format
-  const signalLines: string[] = [];
-  if (signals.lengthHint)   signalLines.push(`Implied length: ${signals.lengthHint}`);
-  if (signals.audience)     signalLines.push(`Implied audience: ${signals.audience}`);
-  if (signals.outputFormat) signalLines.push(`Implied format: ${signals.outputFormat}`);
-  if (signals.hasConstraints) signalLines.push(`User included constraints — preserve and strengthen them.`);
-
-  if (signalLines.length > 0) {
-    userPrompt += `\nDetected signals (use to calibrate the generated prompt):\n${signalLines.map(s => `- ${s}`).join("\n")}\n`;
+    userPrompt += `\n\nUSER CONTEXT PROFILE (MUST be woven into the generated prompt):\n${contextBlock}\nAt least 2 requirements in the generated prompt must directly reference this context.`;
   }
 
   return userPrompt;
