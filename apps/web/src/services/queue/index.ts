@@ -13,6 +13,19 @@ export interface QueueProvider {
   shutdown(): Promise<void>;
 }
 
+/**
+ * In-process queue used in all environments until Upstash or Inngest is wired up.
+ *
+ * KNOWN LIMITATION: Jobs are held in the Node.js process heap.
+ * On Vercel, every cold start begins with an empty queue — any jobs that were
+ * enqueued in a previous lambda invocation are lost. This is intentional and
+ * acceptable while queue volume is low. When you need durable job persistence,
+ * replace this with a real Upstash/Inngest implementation.
+ *
+ * Do NOT reinstate the UpstashQueue or InngestQueue stubs — those silently
+ * drop jobs (they log a message and return "stub-id" without actually enqueuing
+ * anything), which is worse than this in-process queue.
+ */
 export class MemoryQueue implements QueueProvider {
   private jobs = new Map<string, Job>();
 
@@ -55,46 +68,12 @@ export class MemoryQueue implements QueueProvider {
   }
 }
 
-export class UpstashQueue implements QueueProvider {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async enqueue(type: string, _payload: Record<string, unknown>): Promise<string> {
-    console.log(`[Queue: Upstash] Stub enqueue ${type}`);
-    return "stub-id";
-  }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  process(type: string, _handler: (job: Job) => Promise<void>): void {
-    console.log(`[Queue: Upstash] Stub process ${type}`);
-  }
-  async health(): Promise<boolean> { return true; }
-  async shutdown(): Promise<void> {}
-}
-
-export class InngestQueue implements QueueProvider {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async enqueue(type: string, _payload: Record<string, unknown>): Promise<string> {
-    console.log(`[Queue: Inngest] Stub enqueue ${type}`);
-    return "stub-id";
-  }
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  process(type: string, _handler: (job: Job) => Promise<void>): void {
-    console.log(`[Queue: Inngest] Stub process ${type}`);
-  }
-  async health(): Promise<boolean> { return true; }
-  async shutdown(): Promise<void> {}
-}
-
 let activeQueue: QueueProvider | null = null;
 
 export const getQueue = (): QueueProvider => {
   if (activeQueue) return activeQueue;
-  
-  const provider = process.env.QUEUE_PROVIDER || 'memory';
-  switch (provider) {
-    case 'upstash': activeQueue = new UpstashQueue(); break;
-    case 'inngest': activeQueue = new InngestQueue(); break;
-    case 'memory':
-    default:
-      activeQueue = new MemoryQueue(); break;
-  }
+  // Always use MemoryQueue until a real provider is configured.
+  // See the MemoryQueue comment above for limitations.
+  activeQueue = new MemoryQueue();
   return activeQueue;
 };
