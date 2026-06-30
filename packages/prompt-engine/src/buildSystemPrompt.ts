@@ -85,7 +85,8 @@ export async function buildSystemPrompt(
   const intensityRules = INTENSITY_RULES[level] || INTENSITY_RULES["Professional"];
   
   // Try to match the exact style, or fallback to Neutral
-  const matchedStyle = Object.keys(STYLE_RULES).find(k => k.toLowerCase() === style.toLowerCase()) || "Neutral";
+  const safeStyle = style || "Neutral";
+  const matchedStyle = Object.keys(STYLE_RULES).find(k => k.toLowerCase() === safeStyle.toLowerCase()) || "Neutral";
   const styleRules = STYLE_RULES[matchedStyle];
 
   const contextStr = contextText ? contextText : "None";
