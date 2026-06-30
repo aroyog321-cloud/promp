@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { getSettings, setSettings as saveSettings, onSettingsChanged } from "../lib/storage";
 import { optimizePrompt } from "../lib/promptEngine";
-import { PromptlySettings, PromptMode, RewriteLevel, PromptStyle, PROMPT_STYLES, PROMPT_MODES } from '@promptly/types';
+import { PromptlySettings, RewriteLevel, PromptStyle, PROMPT_STYLES } from '@promptly/types';
 import { Segmented } from "./Segmented";
 import { IntensityBars } from "./IntensityBars";
 import { StreamingText } from "./StreamingText";
@@ -138,7 +138,7 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings]);
 
-  const handleOptimize = async (overrideMode?: PromptMode, overrideLevel?: RewriteLevel, overrideStyle?: PromptStyle, refinement?: string) => {
+  const handleOptimize = async (overrideLevel?: RewriteLevel, overrideStyle?: PromptStyle, refinement?: string) => {
     if (!text.trim() || !settings) return;
 
     if (refinement) {
@@ -158,7 +158,7 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
     }
     abortControllerRef.current = new AbortController();
 
-    const modeToUse = overrideMode || settings.defaultMode;
+    // Mode is always "auto" — domain is detected server-side from the text
     const levelToUse = overrideLevel || settings.defaultLevel;
     const styleToUse = overrideStyle || settings.defaultStyle;
 
@@ -170,7 +170,7 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
 
       const result = await optimizePrompt({
         text,
-        mode: modeToUse,
+        mode: "auto",  // always auto — domain detected server-side
         level: levelToUse,
         style: styleToUse,
         context: settings.contextInjectionEnabled ? settings.contextProfile : undefined,
@@ -189,17 +189,21 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
           setIsOptimizing(false);
           setIsStreaming(true);
           streamedText += chunk;
-          setOptimizedText(streamedText);
+          // Strip footer live so it never flashes on screen
+          const displayText = streamedText.split(/\n---\n/)[0];
+          setOptimizedText(displayText);
         },
         abortSignal: abortControllerRef.current.signal
       });
 
       setIsOptimizing(false);
       setIsStreaming(false);
+      // Use server-extracted clean prompt; fall back to locally stripped stream
+      const cleanOptimized = result.optimized ? result.optimized.split(/\n---\n/)[0].trim() : streamedText.split(/\n---\n/)[0].trim();
       history.add({
         text,
-        optimized: result.optimized || streamedText,
-        mode: modeToUse,
+        optimized: cleanOptimized,
+        mode: "auto",  // always auto
         level: levelToUse,
         platform: window.location.hostname,
         source: result.source as any
@@ -324,21 +328,12 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
 
           <div className="promptly-mode-row" style={{ padding: "12px 16px 0", zIndex: 10, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', minWidth: 0 }}>
-          <Segmented
-            options={PROMPT_MODES as any}
-            value={settings.defaultMode}
-            onChange={(val) => {
-              setSettings({...settings, defaultMode: val});
-              saveSettings({ defaultMode: val });
-              handleOptimize(val, settings.defaultLevel, settings.defaultStyle);
-            }}
-          />
           <IntensityBars
             level={settings.defaultLevel}
             onChange={(val) => {
               setSettings({...settings, defaultLevel: val});
               saveSettings({ defaultLevel: val });
-              handleOptimize(settings.defaultMode, val, settings.defaultStyle);
+              handleOptimize(val, settings.defaultStyle);
             }}
           />
         </div>
@@ -348,7 +343,7 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
           onChange={(val) => {
             setSettings({...settings, defaultStyle: val});
             saveSettings({ defaultStyle: val });
-            handleOptimize(settings.defaultMode, settings.defaultLevel, val);
+            handleOptimize(settings.defaultLevel, val);
           }}
         />
       </div>
@@ -500,14 +495,14 @@ export const OptimizerPanel: React.FC<Props> = ({ initialText, onReplace, onClos
               onKeyDown={(e) => {
                 if (e.key === "Enter" && refinementInput.trim()) {
                   e.preventDefault();
-                  handleOptimize(undefined, undefined, undefined, refinementInput.trim());
+                  handleOptimize(undefined, undefined, refinementInput.trim());
                 }
               }}
               style={{ flex: 1, background: "transparent", border: "none", color: "var(--fg)", fontSize: 13, outline: "none", minWidth: 0 }}
             />
             {refinementInput.trim() && (
               <button 
-                onClick={() => handleOptimize(undefined, undefined, undefined, refinementInput.trim())}
+                onClick={() => handleOptimize(undefined, undefined, refinementInput.trim())}
                 style={{ background: "var(--primary)", color: "#fff", border: "none", borderRadius: 4, padding: "2px 8px", fontSize: 12, cursor: "pointer", fontWeight: 500 }}
               >
                 Go

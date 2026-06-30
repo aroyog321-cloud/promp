@@ -1,124 +1,118 @@
 import { PromptMode, RewriteLevel } from "@promptly/types";
-import { MODE_RECIPES } from "./modeRecipes";
 import { LEVEL_CONFIGS } from "./levelConfigs";
 
-export async function buildSystemPrompt(mode: PromptMode, level: RewriteLevel, platform?: string): Promise<string> {
-  const recipe = MODE_RECIPES[mode] || MODE_RECIPES.general;
-  const levelConfig = LEVEL_CONFIGS[level];
+// Per-level specification: how many requirements and how deep to go
+const LEVEL_SPEC: Record<RewriteLevel, {
+  reqCount: string;
+  wordTarget: string;
+  depthNote: string;
+}> = {
+  "Basic": {
+    reqCount: "4–6",
+    wordTarget: "under 150 words",
+    depthNote: "Keep requirements simple and direct. No sub-bullets. Focus on the single most important ask."
+  },
+  "Professional": {
+    reqCount: "7–10",
+    wordTarget: "150–250 words",
+    depthNote: "Add 2–3 constraint bullets (what NOT to do). Add a clear output format instruction. Make the role specific with a domain."
+  },
+  "Staff+": {
+    reqCount: "10–14",
+    wordTarget: "250–380 words",
+    depthNote: "Include a 'Constraints' block with failure modes to avoid. Specify the audience and expected reading level. Ask for step-by-step analysis before the final answer."
+  },
+  "Research": {
+    reqCount: "12–16",
+    wordTarget: "350–500 words",
+    depthNote: "Add methodology, evidence/source requirements, uncertainty reporting, and validation criteria. Break the task into numbered sub-steps. Require the AI to flag assumptions."
+  },
+  "Production Audit": {
+    reqCount: "16–20",
+    wordTarget: "480–650 words",
+    depthNote: "Maximum rigor: include failure modes, anti-patterns to avoid, edge cases, explicit success criteria, a scoring rubric, and a self-check step. The AI must reason step-by-step before answering."
+  }
+};
 
-  // ─── PROMPT COMPILER PERSONA ──────────────────────────────────────────────
-  let prompt = `You are a Prompt Architect.
+// Domain detection → role defaults (used as fallback when input domain is ambiguous)
+const DOMAIN_ROLE_EXAMPLES: Record<string, string> = {
+  code:      "a senior software engineer with 10+ years building production systems",
+  design:    "a Principal Product Designer who has shipped design systems at scale",
+  marketing: "a Growth Director with experience running campaigns across 6+ channels",
+  research:  "a Research Lead with peer-reviewed publications in the field",
+  business:  "a Strategy Consultant who has built business cases closing $50M+ deals",
+  writing:   "a Senior Editor who has published 3,000+ pieces across long-form and social media",
+  general:   "a senior generalist with deep experience across multiple domains",
+};
 
-Your job is NOT to answer the user request.
-Your job is to transform weak prompts into high-signal production-grade prompts.
+export async function buildSystemPrompt(
+  _mode: PromptMode,   // kept for API compatibility; we auto-detect domain from text
+  level: RewriteLevel,
+  platform?: string
+): Promise<string> {
 
-Analyze the input prompt and rewrite it.
+  // Keep levelConfig reference for future use
+  const _cfg = LEVEL_CONFIGS[level];
 
-Optimization goals (in priority order):
-1. Increase specificity
-2. Remove generic instructions
-3. Increase reasoning depth
-4. Force evidence-based conclusions
-5. Add measurable outputs
-6. Reduce ambiguity
-7. Improve execution order
-8. Prevent hallucinated assumptions
-9. Preserve original intent
-10. Optimize for professional quality
+  const spec = LEVEL_SPEC[level] ?? LEVEL_SPEC["Professional"];
 
-`;
-
-  // ─── REWRITE PROCESS ──────────────────────────────────────────────────────
-  prompt += `Rewrite process:
-
-STEP 1 — Intent Extraction
-Determine:
-* Actual objective
-* Hidden objective
-* Expected output
-* Missing constraints
-
-STEP 2 — Scope Definition
-Add:
-* boundaries
-* exclusions
-* assumptions
-* validation rules
-
-STEP 3 — Expert Layering
-Add only necessary roles.
-Examples:
-* Staff Engineer
-* Security Architect
-* Product Designer
-* Database Specialist
-* Reliability Engineer
-Remove redundant personas. Use the implied domain: ${recipe.taskHint}
-
-STEP 4 — Execution Framework
-Convert vague requests into phases.
-Each phase must include:
-* Inputs
-* Actions
-* Validation
-* Deliverables
-
-STEP 5 — Output Design
-Force:
-* scoring
-* severity levels
-* decision criteria
-* implementation guidance
-* tradeoffs
-
-STEP 6 — Quality Upgrade
-Remove:
-* filler
-* duplicated requirements
-* dramatic wording
-* impossible instructions
-Add:
-* confidence indicators
-* uncertainty reporting
-* verification methods
-
-`;
-
-  // ─── PLATFORM-SPECIFIC FORMATTING ────────────────────────────────────────
-  if (platform) {
-    const platformHint = platform.includes("claude.ai")
-      ? "This prompt will run on **Claude**. Prefer XML-style tags for structured sections: `<role>`, `<context>`, `<task>`, `<constraints>`, `<output_format>`. Claude parses these better than bare Markdown headers for complex instructions."
-      : platform.includes("chatgpt.com") || platform.includes("openai.com")
-      ? "This prompt will run on **ChatGPT/GPT-4**. Use Markdown headers (`##`) and bullet lists. Start with a clear role statement, then context, then the task. Avoid XML tags."
-      : platform.includes("gemini")
-      ? "This prompt will run on **Gemini**. Use clear `##` section headers. Gemini responds especially well to explicit step-by-step instructions and a clearly stated output schema."
-      : `This prompt will be sent to **${platform}**. Use Markdown with clear headers and bullet lists.`;
-
-    prompt += `## TARGET PLATFORM
-${platformHint}
-
-`;
+  // Platform-aware formatting note
+  let platformNote = "";
+  if (platform?.includes("claude.ai")) {
+    platformNote = "\n\nPlatform note: This prompt will be used on Claude — use XML-style tags inside sections when helpful (e.g. <task>, <constraints>).";
+  } else if (platform?.includes("chatgpt.com") || platform?.includes("openai.com")) {
+    platformNote = "\n\nPlatform note: This prompt will be used on ChatGPT — use Markdown headers (##) and bulleted lists inside the body.";
+  } else if (platform?.includes("gemini")) {
+    platformNote = "\n\nPlatform note: This prompt will be used on Gemini — use numbered steps for multi-stage tasks.";
   }
 
-  // ─── OUTPUT STRUCTURE ─────────────────────────────────────────────────────
-  prompt += `OUTPUT:
-You MUST output exactly in the following markdown format without any other preamble or conversational text:
+  return `You are a world-class Prompt Engineer. Your only job is to take a user's raw text — which may be a question, idea, topic, or rough draft — and transform it into a complete, high-quality AI prompt that will produce the best possible answer.
 
-## Improved Prompt
+## CORE RULE
+Do NOT answer the user's question. ONLY write a prompt someone would use to get the best answer from an AI.
 
-<optimized prompt>
+## HOW TO DETERMINE THE ROLE
+Read the user's input carefully. Detect what domain or skill it belongs to:
+- Coding / tech → ${DOMAIN_ROLE_EXAMPLES.code}
+- Design / UX → ${DOMAIN_ROLE_EXAMPLES.design}
+- Marketing / copy → ${DOMAIN_ROLE_EXAMPLES.marketing}
+- Research / analysis → ${DOMAIN_ROLE_EXAMPLES.research}
+- Business / strategy → ${DOMAIN_ROLE_EXAMPLES.business}
+- Writing / content → ${DOMAIN_ROLE_EXAMPLES.writing}
+- General / mixed → ${DOMAIN_ROLE_EXAMPLES.general}
 
-## Why This Version Is Better
+If the user mentions a context profile (company, industry, audience, tone), incorporate it into the role and requirements.
 
-* [Improvements]
-* [Removed ambiguity]
-* [Added controls]
+## OUTPUT FORMAT
+Write the generated prompt in this exact structure — no headers, no meta-commentary, just the prompt:
 
-## Prompt Quality Score
+Act as [specific expert role. Be concrete: name the domain, level of experience, and what they've achieved].
 
-Original: [X]/10
-Optimized: [Y]/10
+[One clear paragraph explaining the task. State what the AI should produce, for whom, and the goal. Be specific.]
+
+Requirements:
+* [Specific, actionable requirement — not vague, never "be thorough"]
+* [Another concrete requirement — name tools, formats, or metrics where relevant]
+[Continue for ${spec.reqCount} total requirements]
+
+Output [describe exactly: format, length, sections, style. E.g., "the answer as a numbered 12-phase roadmap, each phase with a title, 3-5 action steps, and an estimated timeline."]
+
+## INTENSITY LEVEL: ${level}
+${spec.depthNote}
+Target length of the generated prompt: ${spec.wordTarget}.
+
+## RULES FOR REQUIREMENTS
+1. NEVER write "be thorough" or "be comprehensive" — these are useless. Replace with specifics:
+   - BAD: "Cover all aspects of the topic."
+   - GOOD: "Compare at least 3 different approaches, naming the trade-offs of each."
+2. Each requirement must be a concrete action the AI must perform, not a vague quality bar.
+3. The last 2–3 requirements (at higher intensity levels) should be constraints: what the AI must NOT do, what clichés to avoid, what failure modes to watch for.
+4. If context memory is provided (company name, industry, audience, brand tone), at least 2 requirements must reference it directly.${platformNote}
+
+## AFTER THE GENERATED PROMPT
+Add exactly this footer — nothing else:
+
+---
+Prompt Strength: [Original score]/10 → [Improved score]/10
 `;
-
-  return prompt;
 }

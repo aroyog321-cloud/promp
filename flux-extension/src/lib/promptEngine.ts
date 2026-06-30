@@ -1,6 +1,21 @@
 import { OptimizeRequest, OptimizeResponse, PromptMode } from '@promptly/types';
 import { localOptimize, buildSystemPrompt, buildUserPrompt, getLevelConfig } from '@promptly/prompt-engine';
 
+/**
+ * Strip the '--- Prompt Strength: X/10 → Y/10' footer that the system prompt
+ * appends. Returns just the clean generated prompt text.
+ */
+function extractGeneratedPrompt(raw: string): string {
+  if (!raw) return raw;
+  // Split on the '---' separator line
+  const parts = raw.split(/\n---\n/);
+  if (parts.length > 1) return parts[0].trim();
+  // Fallback: old ## Improved Prompt header format
+  const match = raw.match(/## Improved Prompt\s+([\s\S]*?)(?=## Why This Version Is Better|---\s*Prompt Strength|$)/i);
+  if (match?.[1]) return match[1].trim();
+  return raw.trim();
+}
+
 class SimpleCache<K, V> {
   private map = new Map<K, V>();
   constructor(private maxSize: number = 20) {}
@@ -231,82 +246,25 @@ export async function optimizePrompt(
         const platform = SAFE_PLATFORMS.includes(rawPlatform) ? rawPlatform : 'web';
         const systemPrompt = await buildSystemPrompt(req.mode, req.level, platform);
         const userPrompt = buildUserPrompt(req);
-        const isTwoPass = req.level === "Staff+" || req.level === "Research" || req.level === "Production Audit";
 
-        if (isTwoPass) {
-          // Pass 1: Draft (no stream)
-          const draftText = await directAIFetch(
-            endpoint, 
-            config.apiKey, 
-            [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt }
-            ], 
-            getLevelConfig(req.level, false), 
-            false,
-            undefined,
-            options?.abortSignal
-          );
+        // Single-pass only — two-pass critique removed (was causing slowness + over-generation)
+        const rawResult = await directAIFetch(
+          endpoint,
+          config.apiKey,
+          [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ],
+          getLevelConfig(req.level, false),
+          !!req.stream,
+          options?.onChunk,
+          options?.abortSignal
+        );
 
-          // Pass 2: Critique
-          const critiquePrompt = `Apply this failure-mode rubric to the draft below. If any check fails, output a REVISED version that fixes the issues. If it already passes all checks, output it unchanged. Do not explain.
-
-RUBRIC:
-- ROLE: Must be a specific person with opinions, not a generic title. 
-  Bad: "an experienced data scientist." 
-  Fix: Name the specific experience, constraints, and philosophy they hold.
-- CONTEXT: Must contain concrete facts or labeled assumptions, not category descriptions.
-  Bad: "a B2B software company." 
-  Fix: Inject concrete details (e.g., "12-person Series A SaaS").
-- OBJECTIVE: Must have measurable success criteria.
-  Bad: "write a good report." 
-  Fix: Specify word count, structure, and what the report should achieve.
-- CONSTRAINTS: Must have ≥2 explicit negative (Do NOT) constraints naming specific clichés or failure modes to avoid.
-  Bad: "Be concise." 
-  Fix: "Do NOT use passive voice or exceed 300 words."
-- OUTPUT FORMAT: Must specify exact structure, sections, and length.
-- SUCCESS CRITERIA: Must define what a high-quality output looks like to a skeptic.
-${req.level === "Research" || req.level === "Production Audit" ? "- EDGE CASES: Must explicitly name 2-3 likely failure modes for the model to watch out for." : ""}
-
-DRAFT:
-${draftText}`;
-
-          const critiqueSystemPrompt = "You are a precise editor. Apply the rubric exactly as stated. Output only the revised prompt.";
-          const finalResult = await directAIFetch(
-            endpoint,
-            config.apiKey,
-            [
-              { role: "system", content: critiqueSystemPrompt },
-              { role: "user", content: critiquePrompt }
-            ],
-            getLevelConfig(req.level, true),
-            !!req.stream,
-            options?.onChunk,
-            options?.abortSignal
-          );
-
-          const response: OptimizeResponse = { optimized: finalResult, source: "api" };
-          if (!req.refinement) PROMPT_CACHE.set(cacheKey, response);
-          return response;
-        } else {
-          // 1-Pass
-          const finalResult = await directAIFetch(
-            endpoint,
-            config.apiKey,
-            [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt }
-            ],
-            getLevelConfig(req.level, false),
-            !!req.stream,
-            options?.onChunk,
-            options?.abortSignal
-          );
-
-          const response: OptimizeResponse = { optimized: finalResult, source: "api" };
-          if (!req.refinement) PROMPT_CACHE.set(cacheKey, response);
-          return response;
-        }
+        const finalResult = extractGeneratedPrompt(rawResult);
+        const response: OptimizeResponse = { optimized: finalResult, source: "api" };
+        if (!req.refinement) PROMPT_CACHE.set(cacheKey, response);
+        return response;
       } else {
         // Next.js Route (BG Proxied to bypass CORS, CSP, and loopback/PNA restrictions)
         let payload: any = { ...req, clientWillSync: true, platform: req.platform || window.location.hostname || "unknown" };
@@ -353,7 +311,7 @@ ${draftText}`;
                 }
               } else if (msg.type === "DONE") {
                 port.disconnect();
-                const response: OptimizeResponse = { optimized: fullText.trim(), source: "api" };
+                const response: OptimizeResponse = { optimized: extractGeneratedPrompt(fullText.trim()), source: "api" };
                 if (!req.refinement) PROMPT_CACHE.set(cacheKey, response);
                 resolve(response);
               } else if (msg.type === "ERROR") {
@@ -458,7 +416,8 @@ ${draftText}`;
           return response;
         }
         if (typeof data.optimized === "string" && data.optimized.trim()) {
-          const response: OptimizeResponse = { optimized: data.optimized.trim(), source: "api" };
+          // Server-side route already extracts the prompt, but apply locally as safety net
+          const response: OptimizeResponse = { optimized: extractGeneratedPrompt(data.optimized.trim()), source: "api" };
           if (!req.refinement) PROMPT_CACHE.set(cacheKey, response);
           return response;
         }

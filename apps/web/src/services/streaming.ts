@@ -106,11 +106,20 @@ export function createOpenAIStream(response: Response, context?: StreamContext) 
       const dbLevel = toDbLevel(context.body.level);
       const dbMode  = toDbMode(context.body.mode);
 
+      // Strip the '--- Prompt Strength: X/10 → Y/10' footer before saving
+      const cleanText = (() => {
+        const parts = accumulatedText.trim().split(/\n---\n/);
+        if (parts.length > 1) return parts[0].trim();
+        const match = accumulatedText.match(/## Improved Prompt\s+([\s\S]*?)(?=## Why This Version Is Better|---\s*Prompt Strength|$)/i);
+        if (match?.[1]) return match[1].trim();
+        return accumulatedText.trim();
+      })();
+
       try {
         const { error } = await context.supabase.from('PromptHistory').insert([{
           userId:           context.user.id,
           originalPrompt:  context.body.text,
-          optimizedPrompt: accumulatedText.trim(),
+          optimizedPrompt: cleanText,
           platformUsed:    context.platform || context.body.platform || 'api',
           promptMode:      dbMode,
           rewriteLevel:    dbLevel,

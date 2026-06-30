@@ -45,18 +45,13 @@ export const POST = withMetrics(async (request: Request) => {
     }
     const { user, supabaseUserClient, supabaseAdmin } = authRes;
 
-    const isTwoPass = body.level === "Staff+" || body.level === "Research" || body.level === "Production Audit";
     const isRegeneration = !!body.refinement || !!body.previousPrompt;
     const hasContextMemory = !!body.context && Object.values(body.context).some(v => !!v);
 
-    // Parallelize independent remote calls
+    // Parallelize independent remote calls — always classify mode from text (domain detection)
     const billingPromise = checkQuotaAndTier(supabaseAdmin, user.id, isRegeneration, hasContextMemory);
     const dynamicApiKey = await getDynamicApiKey(supabaseAdmin, GEMINI_API_KEY || '');
-    
-    let classifyPromise: Promise<string | null> | null = null;
-    if (body.mode === "auto") {
-      classifyPromise = classifyPromptMode(body.text, dynamicApiKey || GEMINI_API_KEY || '');
-    }
+    const classifyPromise = classifyPromptMode(body.text, dynamicApiKey || GEMINI_API_KEY || '');
 
     const [billingResult, classifiedMode] = await Promise.all([
       billingPromise,
@@ -96,13 +91,13 @@ export const POST = withMetrics(async (request: Request) => {
     const systemPrompt = await buildSystemPrompt(resolvedMode, body.level, platform);
     const userPrompt = buildUserPrompt(body);
 
-    const activeApiKey = isTwoPass ? (GEMINI_API_KEY_PREMIUM || FINAL_API_KEY) : FINAL_API_KEY;
+    const activeApiKey = FINAL_API_KEY;
 
     const finalRes = await executeOptimization(
       systemPrompt, 
       userPrompt, 
       body.level, 
-      isTwoPass, 
+      false,         // isTwoPass removed
       activeApiKey, 
       !!body.stream,
     );
@@ -118,6 +113,16 @@ export const POST = withMetrics(async (request: Request) => {
         return NextResponse.json({ error: "Empty response from AI" }, { status: 502 });
       }
 
+      // Extract just the generated prompt (everything before the '---' footer line)
+      const extractedPrompt = (() => {
+        const parts = optimizedText.split(/\n---\n/);
+        if (parts.length > 1) return parts[0].trim();
+        // Fallback: old format with ## Improved Prompt header
+        const match = optimizedText.match(/## Improved Prompt\s+([\s\S]*?)(?=## Why This Version Is Better|---\s*Prompt Strength|$)/i);
+        if (match?.[1]) return match[1].trim();
+        return optimizedText;
+      })();
+
       const responseTime = (Date.now() - startTime) / 1000;
 
       // FIX #1: Await saveHistory so failures are surfaced and logged,
@@ -131,7 +136,7 @@ export const POST = withMetrics(async (request: Request) => {
           id: crypto.randomUUID(),
           userId: user.id,
           originalPrompt: body.text,
-          optimizedPrompt: optimizedText,
+          optimizedPrompt: extractedPrompt,  // store the clean prompt
           platformUsed: platform || body.platform || 'api',
           promptMode: mappedMode,
           rewriteLevel: mappedLevel,
@@ -143,13 +148,12 @@ export const POST = withMetrics(async (request: Request) => {
         try {
           await saveHistory();
         } catch (err) {
-          // Non-fatal: log the failure but still return the optimized result to the user.
           console.error('[Promptly] PromptHistory insert failed:', err instanceof Error ? err.message : err);
         }
       }
 
       return NextResponse.json<OptimizeResponse>({
-        optimized: optimizedText,
+        optimized: extractedPrompt,  // return the clean prompt to the client
         source: "api"
       });
     }

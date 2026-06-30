@@ -324,20 +324,15 @@ const PromptlyApp: React.FC<{ platform: PlatformConfig }> = ({ platform }) => {
     setOrbLoading(true);
 
     try {
-      // Always read fresh settings from storage so the double-click
-      // uses whatever mode/level the user last picked in the panel,
-      // not a potentially stale in-memory snapshot.
       const freshSettings = await getSettings();
       const activeSettings = freshSettings || settings;
 
-      const mode = activeSettings.defaultMode || "auto";
+      const mode = "auto";  // always auto — domain detected server-side
       const level = activeSettings.defaultLevel;
       const style = activeSettings.defaultStyle || "neutral";
 
-      if (!isRegenerating && mode === "auto") {
-        showToast("Auto-detecting mode...", "info");
-      } else if (!isRegenerating) {
-        showToast(`Optimizing in ${mode} mode...`, "info");
+      if (!isRegenerating) {
+        showToast("Generating prompt...", "info");
       }
 
       const result = await optimizePrompt({

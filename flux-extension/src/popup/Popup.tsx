@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useId } from "react";
 import { getSettings, setSettings as persistSettings } from "../lib/storage";
-import { ContextProfile, PromptlySettings, PROMPT_MODES, REWRITE_LEVELS, PromptMode, RewriteLevel } from '@promptly/types';
+import { ContextProfile, PromptlySettings, REWRITE_LEVELS, RewriteLevel } from '@promptly/types';
 
 export const Popup: React.FC = () => {
   const [settings, setSettings] = useState<PromptlySettings | null>(null);
@@ -139,29 +139,17 @@ export const Popup: React.FC = () => {
         {activeTab === 'general' && (
           <div className="space-y-5">
             <section className="space-y-3 promptly-fade-in">
-              <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Defaults</h2>
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Mode">
-                  <select
-                    className="select"
-                    value={settings.defaultMode}
-                    onChange={(e) => update({ defaultMode: e.target.value as PromptMode })}
-                    aria-label="Default prompt mode"
-                  >
-                    {PROMPT_MODES.map((m: { value: string, label: string }) => (
-                      <option key={m.value} value={m.value}>{m.label}</option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Rewrite level">
+              <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Intensity</h2>
+              <div className="grid grid-cols-1 gap-4">
+                <Field label="Prompt depth">
                   <select
                     className="select"
                     value={settings.defaultLevel}
                     onChange={(e) => update({ defaultLevel: e.target.value as RewriteLevel })}
                     aria-label="Default rewrite level"
                   >
-                    {REWRITE_LEVELS.map((l: { value: string, label: string }) => (
-                      <option key={l.value} value={l.value}>{l.label}</option>
+                    {REWRITE_LEVELS.map((l: { value: string, label: string, description: string }) => (
+                      <option key={l.value} value={l.value}>{l.label} — {l.description}</option>
                     ))}
                   </select>
                 </Field>
