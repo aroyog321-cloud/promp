@@ -63,7 +63,7 @@ export default function HistoryPage() {
     try {
       let query = supabase
         .from('PromptHistory')
-        .select('id, platformUsed, promptMode, rewriteLevel, createdAt, isStarred, responseTime, originalPrompt', { count: 'exact' })
+        .select('id, platformUsed, promptMode, rewriteLevel, createdAt, isStarred, responseTime, originalPrompt, optimizedPrompt', { count: 'exact' })
         .eq('userId', user.id)
         .order('createdAt', { ascending: false })
         .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1)
@@ -133,9 +133,15 @@ export default function HistoryPage() {
   }
 
   const handleDelete = async (id: string) => {
+    const backup = prompts
     setPrompts(prev => prev.filter(p => p.id !== id))
     setTotalCount(prev => prev - 1)
-    await supabase.from('PromptHistory').delete().eq('id', id)
+    const { error } = await supabase.from('PromptHistory').delete().eq('id', id)
+    if (error) {
+      console.error('Failed to delete prompt:', error)
+      setPrompts(backup)
+      setTotalCount(prev => prev + 1)
+    }
     setActiveMenu(null)
   }
 

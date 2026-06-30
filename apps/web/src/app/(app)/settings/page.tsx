@@ -159,7 +159,7 @@ export default function SettingsPage() {
                   {syncStatus === 'no_extension'  && 'Extension not detected. Make sure Proenpt is installed and this tab is open.'}
                   {syncStatus === 'idle'          && 'Waiting to sync…'}
                 </span>
-                {token && syncStatus !== 'syncing' && (
+                {token && syncStatus === 'no_extension' && (
                   <button
                     onClick={() => syncTokenToExtension(token)}
                     className="ml-auto flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"

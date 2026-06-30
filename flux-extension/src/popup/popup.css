@@ -149,3 +149,8 @@ h3,
   background: var(--border-subtle);
   width: 100%;
 }
+
+/* Reliable fade-in that doesn't need inline style override */
+.promptly-fade-in {
+  animation: fadeIn 300ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

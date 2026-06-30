@@ -138,7 +138,7 @@ export const Popup: React.FC = () => {
       <div className="flex-1 overflow-y-auto p-5 pb-6 custom-scrollbar">
         {activeTab === 'general' && (
           <div className="space-y-5">
-            <section className="space-y-3 animate-in fade-in" style={{ opacity: 0, animationDelay: '0ms' }}>
+            <section className="space-y-3 promptly-fade-in">
               <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Defaults</h2>
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Mode">
@@ -168,9 +168,9 @@ export const Popup: React.FC = () => {
               </div>
             </section>
             
-            <div className="minimal-divider animate-in fade-in" style={{ opacity: 0, animationDelay: '50ms' }} />
+            <div className="minimal-divider promptly-fade-in" />
             
-            <section className="space-y-3 animate-in fade-in" style={{ opacity: 0, animationDelay: '100ms' }}>
+            <section className="space-y-3 promptly-fade-in">
               <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Preferences</h2>
               <div className="flex items-center justify-between promptly-card p-3">
                 <div>
@@ -183,9 +183,9 @@ export const Popup: React.FC = () => {
               </div>
             </section>
             
-            <div className="minimal-divider animate-in fade-in" style={{ opacity: 0, animationDelay: '150ms' }} />
+            <div className="minimal-divider promptly-fade-in" />
             
-            <section className="space-y-3 animate-in fade-in" style={{ opacity: 0, animationDelay: '200ms' }}>
+            <section className="space-y-3 promptly-fade-in">
               <div className="flex items-center justify-between">
                 <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Your Plan</h2>
                 <span className="text-[10px] font-semibold bg-[var(--surface-floating)] border border-[var(--border-subtle)] px-2 py-0.5 rounded text-[var(--text-secondary)]">
@@ -199,14 +199,14 @@ export const Popup: React.FC = () => {
                     {apiPlanData?.tier?.toLowerCase() === 'expert' ? (
                       <>{apiPlanData?.total_requests_today || 0} <span className="text-[var(--text-tertiary)]">optimizations (Unlimited)</span></>
                     ) : (
-                      <>{apiPlanData?.total_requests_today || 0} <span className="text-[var(--text-tertiary)]">/ {apiPlanData?.tier?.toLowerCase() === 'pro' ? '25' : '10'} optimizations</span></>
+                      <>{apiPlanData?.total_requests_today || 0} <span className="text-[var(--text-tertiary)]">/ {apiPlanData?.tier?.toLowerCase() === 'pro' ? '50' : '10'} optimizations</span></>
                     )}
                   </p>
                 </div>
                 {apiPlanData?.tier?.toLowerCase() !== 'expert' && (
-                  <div className="h-1.5 w-full bg-[var(--surface-base)] rounded-full overflow-hidden border border-[var(--border-subtle)]">
-                    <div className="h-full bg-gradient-to-r from-cyan-500 to-purple-500 rounded-full" style={{ width: `${Math.min(100, Math.round(((apiPlanData?.total_requests_today || 0) / (apiPlanData?.tier?.toLowerCase() === 'pro' ? 25 : 10)) * 100))}%` }}></div>
-                  </div>
+                    <div className="h-1.5 w-full bg-[var(--surface-base)] rounded-full overflow-hidden border border-[var(--border-subtle)]">
+                      <div className="h-full bg-gradient-to-r from-cyan-500 to-purple-500 rounded-full" style={{ width: `${Math.min(100, Math.round(((apiPlanData?.total_requests_today || 0) / (apiPlanData?.tier?.toLowerCase() === 'pro' ? 50 : 10)) * 100))}%` }}></div>
+                    </div>
                 )}
                 {apiPlanData?.tier?.toLowerCase() !== 'expert' && (
                   <button 
@@ -229,7 +229,7 @@ export const Popup: React.FC = () => {
 
         {activeTab === 'context' && (
           <div className="space-y-5">
-            <section className="space-y-4 animate-in fade-in" style={{ opacity: 0, animationDelay: '0ms' }}>
+            <section className="space-y-4 promptly-fade-in">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Context Memory</h2>

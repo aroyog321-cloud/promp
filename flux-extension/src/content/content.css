@@ -824,6 +824,12 @@
   font-size: 12px;
   line-height: 1.7;
   letter-spacing: -0.005em;
+  overflow-y: auto;
+  max-height: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 
 /* History Groups */
 .promptly-history-group {
@@ -838,12 +844,6 @@
   color: var(--text-quaternary);
   margin-bottom: 8px;
   padding-left: 4px;
-}
-  overflow-y: auto;
-  max-height: 360px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 .promptly-diff-col.optimized {
   background: rgba(0, 0, 0, 0.4);
@@ -933,8 +933,11 @@
   font-family: var(--font-body);
 }
 
-/* Toast (Insert confirmation) */
-.promptly-toast {
+/* Toast (Insert confirmation — pill floating above panel) */
+/* NOTE: .promptly-toast is also used by content/index.tsx for full-page toasts.
+   Those styles are declared earlier and use .promptly-toast-error/success/info classes.
+   This block styles the PANEL-internal pill toast only — scoped by position:absolute */
+.promptly-panel .promptly-toast {
   position: absolute;
   top: -10px;
   left: 50%;
@@ -957,7 +960,7 @@
   white-space: nowrap;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
 }
-.promptly-toast .check {
+.promptly-panel .promptly-toast .check {
   color: var(--accent-success);
   display: inline-flex;
 }
@@ -1025,7 +1028,7 @@
   max-width: 90vw;
   height: 70vh;
   max-height: 600px;
-  background: var(--glass-popover);
+  background: rgba(10, 10, 10, 0.75);
   backdrop-filter: blur(40px) saturate(180%);
   -webkit-backdrop-filter: blur(40px) saturate(180%);
   border-top: 1px solid rgba(255, 255, 255, 0.12);
@@ -1252,12 +1255,13 @@
 .promptly-mini-bars .bar:nth-child(4) { height: 10px; }
 
 /* Circular Glowing Loading Ring around the Orb */
+/* Ring is always mounted in DOM but opacity:0 when idle — only visible on hover/loading */
 .promptly-loading-ring {
   position: absolute;
-  inset: -5px; /* Orbit radius around the orb */
+  inset: -5px;
   border-radius: 50%;
   pointer-events: none;
-  opacity: 0.65;
+  opacity: 0; /* Hidden by default — shown only on hover and when loading */
   transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   z-index: 1;
 }
