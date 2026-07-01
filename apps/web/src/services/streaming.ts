@@ -23,11 +23,11 @@ const LEVEL_TO_DB: Record<string, string> = {
   // New values added by extend_rewrite_level_enum migration
   BASIC:              'BASIC',
   PROFESSIONAL:       'PROFESSIONAL',
-  'STAFF+':           'STAFF+',           // ← was incorrectly 'STAFF_PLUS'
-  STAFF_PLUS:         'STAFF+',           // normalise alternate form
+  'STAFF+':           'STAFF_PLUS',
+  STAFF_PLUS:         'STAFF_PLUS',
   RESEARCH:           'RESEARCH',
-  'PRODUCTION AUDIT': 'PRODUCTION AUDIT', // ← was incorrectly 'PRODUCTION_AUDIT'
-  PRODUCTION_AUDIT:   'PRODUCTION AUDIT', // normalise alternate form
+  'PRODUCTION AUDIT': 'PRODUCTION_AUDIT',
+  PRODUCTION_AUDIT:   'PRODUCTION_AUDIT',
 };
 
 // Must match PromptMode enum in Supabase exactly.

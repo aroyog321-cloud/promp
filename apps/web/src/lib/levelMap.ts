@@ -5,11 +5,11 @@ export const LEVEL_MAP: Record<string, string> = {
   EXPERT:           'EXPERT',
   BASIC:            'BASIC',
   PROFESSIONAL:     'PROFESSIONAL',
-  'STAFF+':         'STAFF+',
-  STAFF_PLUS:       'STAFF+',
+  'STAFF+':         'STAFF_PLUS',
+  STAFF_PLUS:       'STAFF_PLUS',
   RESEARCH:         'RESEARCH',
-  'PRODUCTION AUDIT':  'PRODUCTION AUDIT',
-  PRODUCTION_AUDIT: 'PRODUCTION AUDIT',
+  'PRODUCTION AUDIT':  'PRODUCTION_AUDIT',
+  PRODUCTION_AUDIT: 'PRODUCTION_AUDIT',
 };
 
 export const MODE_MAP: Record<string, string> = {
