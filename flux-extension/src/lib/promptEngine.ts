@@ -7,12 +7,8 @@ import { localOptimize, buildSystemPrompt, buildUserPrompt, getLevelConfig } fro
  */
 function extractGeneratedPrompt(raw: string): string {
   if (!raw) return raw;
-  // Split on the '---' separator line
-  const parts = raw.split(/\n---\n/);
-  if (parts.length > 1) return parts[0].trim();
-  // Fallback: old ## Improved Prompt header format
-  const match = raw.match(/## Improved Prompt\s+([\s\S]*?)(?=## Why This Version Is Better|---\s*Prompt Strength|$)/i);
-  if (match?.[1]) return match[1].trim();
+  // Legacy footers (Prompt Strength, etc.) were removed from the backend.
+  // We no longer split on '---' as it truncates valid AI prompts that use markdown horizontal rules.
   return raw.trim();
 }
 
@@ -182,22 +178,8 @@ function keywordClassify(text: string): PromptMode {
 
 async function resolveMode(req: OptimizeRequest, config: { categorizerApiUrl?: string; categorizerApiKey?: string; }): Promise<PromptMode> {
   if (req.mode !== "auto") return req.mode;
-  if (config.categorizerApiUrl) {
-    try {
-      const categorizerPrompt = `Classify this user request into EXACTLY ONE of the following categories: general, developer, designer, marketing, research, business, content-creator, startup-founder. Output ONLY the category name. Do not include punctuation or explanation.\n\nRequest: "${req.text}"`;
-      const isDirectCategorizer = config.categorizerApiUrl.includes('/chat/completions') || config.categorizerApiUrl.includes('/v1');
-      if (isDirectCategorizer) {
-        const endpoint = config.categorizerApiUrl.endsWith('/chat/completions') ? config.categorizerApiUrl : `${config.categorizerApiUrl.replace(/\/+$/, "")}/chat/completions`;
-        const catResult = await directAIFetch(endpoint, config.categorizerApiKey, [{ role: "user", content: categorizerPrompt }], { temperature: 0.1, maxOutputTokens: 20 }, false);
-        const rawCategory = catResult.trim().toLowerCase();
-        if (["general", "developer", "designer", "marketing", "research", "business", "content-creator", "startup-founder"].includes(rawCategory)) {
-          return rawCategory as any;
-        }
-      }
-    } catch (e) {
-      console.warn("Categorizer API failed, falling back to keyword classify", e);
-    }
-  }
+  // We completely removed the API-based classification because it wasted an API call,
+  // hit rate limits twice as fast, and the backend no longer even uses the "mode" for templating.
   return keywordClassify(req.text);
 }
 
@@ -345,37 +327,19 @@ export async function optimizePrompt(
           return await streamPromise;
         }
 
-        // Handle non-streaming path via bgFetch with exponential backoff
-        let attempt = 0;
-        const maxAttempts = 3;
+        // Handle non-streaming path via bgFetch (Next.js backend already handles retries)
         let res: Response | null = null;
-        
-        while (attempt < maxAttempts) {
-          attempt++;
-          try {
-            res = await bgFetch(endpoint, {
-              method: "POST",
-              headers: { 
-                "Content-Type": "application/json", 
-                ...(config.accessToken ? { "Authorization": `Bearer ${config.accessToken}` } : (config.apiKey ? { "Authorization": `Bearer ${config.apiKey}` } : {})) 
-              },
-              body: JSON.stringify(payload)
-            });
-            
-            if (!res.ok) {
-              const isRetryable = [429, 500, 502, 503, 504].includes(res.status);
-              if (isRetryable && attempt < maxAttempts) {
-                const delay = Math.pow(2, attempt) * 1000;
-                await new Promise(r => setTimeout(r, delay));
-                continue;
-              }
-            }
-            break; // Success or non-retryable error
-          } catch (e) {
-            if (attempt >= maxAttempts) throw e;
-            const delay = Math.pow(2, attempt) * 1000;
-            await new Promise(r => setTimeout(r, delay));
-          }
+        try {
+          res = await bgFetch(endpoint, {
+            method: "POST",
+            headers: { 
+              "Content-Type": "application/json", 
+              ...(config.accessToken ? { "Authorization": `Bearer ${config.accessToken}` } : (config.apiKey ? { "Authorization": `Bearer ${config.apiKey}` } : {})) 
+            },
+            body: JSON.stringify(payload)
+          });
+        } catch (e) {
+          throw e;
         }
 
         if (!res) throw new Error("Failed to fetch after retries");

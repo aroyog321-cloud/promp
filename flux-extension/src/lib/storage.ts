@@ -98,7 +98,11 @@ export async function getSettings(): Promise<PromptlySettings> {
       }
     }
 
-    return { ...DEFAULT_SETTINGS, ...stored, contextProfile: { ...DEFAULT_SETTINGS.contextProfile, ...(stored?.contextProfile ?? {}) } };
+    const finalSettings = { ...DEFAULT_SETTINGS, ...stored, contextProfile: { ...DEFAULT_SETTINGS.contextProfile, ...(stored?.contextProfile ?? {}) } };
+    if (!finalSettings.apiBaseUrl || finalSettings.apiBaseUrl.includes("localhost") || finalSettings.apiBaseUrl.includes("127.0.0.1")) {
+      finalSettings.apiBaseUrl = "https://proenpt.vercel.app";
+    }
+    return finalSettings;
   } catch (e) {
     console.warn("[Promptly] Failed to get settings, using defaults.", e);
     return DEFAULT_SETTINGS;

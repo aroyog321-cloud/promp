@@ -4,9 +4,9 @@ import { PromptMode, RewriteLevel } from "@promptly/types";
 const LIMITS: Record<RewriteLevel, string> = {
   "Basic": "under 100 words",
   "Professional": "150–250 words",
-  "Staff+": "250–400 words",
-  "Research": "350–500 words",
-  "Production Audit": "500–700 words"
+  "Staff+": "ABSOLUTE MINIMUM 250 words, up to 400 words. You MUST aggressively expand on the user's premise.",
+  "Research": "ABSOLUTE MINIMUM 350 words, up to 500 words. You MUST aggressively expand on the user's premise.",
+  "Production Audit": "ABSOLUTE MINIMUM 500 words, up to 700 words. You MUST aggressively expand on the user's premise."
 };
 
 const INTENSITY_RULES: Record<RewriteLevel, string> = {
@@ -25,25 +25,27 @@ const INTENSITY_RULES: Record<RewriteLevel, string> = {
 * Avoid excessive frameworks or unnecessary complexity.`,
 
   "Staff+": `Staff+ Optimization Rules:
-* Restructure the request into a highly optimized, context-rich prompt.
-* Assign a specific expert role or persona to the AI.
-* Add critical context and improve instructions for edge cases.
-* Define strict constraints and output formats.
-* Require step-by-step reasoning before the final answer.`,
+* Restructure the request into a highly optimized, context-rich mega-prompt.
+* Assign a specific, world-class expert role or persona to the AI.
+* Dramatically expand the prompt by defining critical context, background assumptions, and edge cases.
+* Define strict, multi-faceted constraints, output formats, and structural requirements.
+* Require deep step-by-step reasoning (Chain of Thought) before the final answer.
+* The output MUST be significantly longer and more detailed than the original request.`,
 
   "Research": `Research Optimization Rules:
-* Rebuild the prompt for academic or deep analytical rigor.
-* Define specific methodology and evidence/source requirements.
-* Break the task into numbered sub-steps for systematic analysis.
-* Require the AI to flag assumptions and uncertainty.
-* Enforce strict formatting and data presentation rules.`,
+* Rebuild the prompt for academic or deep analytical rigor, creating a comprehensive research brief.
+* Define specific methodology, evidence/source requirements, and analytical frameworks.
+* Break the task into numbered sub-steps for systematic, multi-disciplinary analysis.
+* Require the AI to actively flag assumptions, biases, and uncertainty.
+* Enforce strict formatting and data presentation rules (e.g., tables, citations).
+* Exhaustively expand on the topic to ensure no nuance is missed.`,
 
   "Production Audit": `Production Audit Optimization Rules:
-* Reconstruct the prompt into an exhaustive, expert-level auditing framework.
-* Assign a precise role (e.g., Principal Engineer, Chief Auditor).
-* Define exhaustive success criteria, edge cases, and anti-patterns to avoid.
-* Include a mandatory self-check or scoring rubric step.
-* Ensure maximum rigor and constraint enforcement.`
+* Reconstruct the prompt into an exhaustive, expert-level auditing framework of maximum length and rigor.
+* Assign a precise role (e.g., Principal Engineer, Chief Auditor, Senior Legal Counsel).
+* Define exhaustive success criteria, edge cases, failure modes, and anti-patterns to avoid.
+* Include a mandatory self-check, scoring rubric, and critique step.
+* Ensure maximum constraint enforcement. The prompt must be extremely thorough and highly engineered.`
 };
 
 const STYLE_RULES: Record<string, string> = {
@@ -113,7 +115,7 @@ Your job is ONLY to transform the user's input into a higher quality prompt.
 SETTINGS:
 Intensity: ${level}
 Style: ${matchedStyleKey}
-Target Length: ${wordLimit}
+Target Length (STRICT): ${wordLimit}
 Context Memory:
 ${contextStr}
 
@@ -123,9 +125,9 @@ Requirements:
 * Preserve the user's original objective.
 * Improve clarity, structure, and precision.
 * Remove ambiguity and vague instructions.
-* Add useful constraints only when strongly implied.
-* Keep the prompt concise and execution-focused.
-* Do not introduce unsupported assumptions or facts.
+${["Basic", "Professional"].includes(level) 
+  ? "* Add useful constraints only when strongly implied.\n* Keep the prompt concise and execution-focused.\n* Do not introduce unsupported assumptions or facts." 
+  : "* Aggressively expand the prompt by inferring necessary context, constraints, and edge cases.\n* Add professional frameworks, roles, and structural depth to maximize AI performance.\n* Do NOT be concise; generate a comprehensive, exhaustive prompt."}
 * Respect the selected target length.
 * Use context memory only if directly relevant.
 
